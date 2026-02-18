@@ -25,7 +25,12 @@
         background: var(--bg);
       }
       .container { max-width: 920px; margin: 0 auto; padding: 20px; }
-      .top-bar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+      .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; }
+      .welcome-user {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+      }
       .cabinet-btn { width: auto; min-width: 140px; }
       h1 { margin: 0 0 10px; font-size: 28px; }
       .subtitle { color: var(--muted); margin-bottom: 16px; }
@@ -154,6 +159,7 @@
   <body>
     <div class="container">
       <div class="top-bar">
+        <div id="welcomeUser" class="welcome-user hidden"></div>
         <button id="cabinetBtn" class="cabinet-btn btn-secondary hidden">Мій кабінет</button>
       </div>
       <div class="brand-wrap">
@@ -398,7 +404,10 @@
 
       function showByRole() {
         const splash = document.getElementById("authSplash");
+        const welcome = document.getElementById("welcomeUser");
         splash.classList.toggle("hidden", authState !== "loading");
+        welcome.classList.add("hidden");
+        welcome.textContent = "";
         if (authState === "loading") {
           document.getElementById("appContent").classList.add("hidden");
           document.getElementById("landingCard").classList.add("hidden");
@@ -419,6 +428,10 @@
         document.getElementById("createTaskCard").classList.toggle("hidden", !isRegistered || selectedRole !== "client");
         document.getElementById("performerHomeCard").classList.toggle("hidden", !isRegistered || selectedRole !== "performer");
         document.getElementById("cabinetBtn").classList.toggle("hidden", !isRegistered);
+        if (isRegistered && selectedRole === "client") {
+          welcome.textContent = `Ласкаво просимо, ${currentUser?.full_name || "Клієнт"}`;
+          welcome.classList.remove("hidden");
+        }
         if (!isRegistered) {
           document.getElementById("performerProfileCard").classList.add("hidden");
           document.getElementById("cabinetCard").classList.add("hidden");
