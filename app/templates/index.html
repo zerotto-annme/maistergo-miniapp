@@ -101,6 +101,26 @@
       .profile-card .master-avatar { width: 82px; height: 82px; }
       .muted { color: var(--muted); }
       .status-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: var(--bg-soft); color: var(--brand-dark); font-size: 12px; font-weight: 700; }
+      .cabinet-profile {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+      .cabinet-photo {
+        width: 96px;
+        height: 96px;
+        border-radius: 12px;
+        object-fit: cover;
+        border: 1px solid var(--border);
+        background: var(--bg-soft);
+      }
+      .cabinet-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
       @media (max-width: 720px) {
         .row { grid-template-columns: 1fr; }
         .actions { grid-template-columns: 1fr; }
@@ -108,13 +128,14 @@
         .checks { grid-template-columns: 1fr; }
         .quick-grid { grid-template-columns: 1fr; }
         .master-head { grid-template-columns: 56px 1fr; }
+        .cabinet-profile { grid-template-columns: 1fr; }
       }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="top-bar">
-        <button id="cabinetBtn" class="cabinet-btn btn-secondary">Кабінет</button>
+        <button id="cabinetBtn" class="cabinet-btn btn-secondary hidden">Мій кабінет</button>
       </div>
       <div class="brand-wrap">
         <img class="brand-logo" src="/static/logo-new.png" alt="МайстерGO" />
@@ -226,8 +247,6 @@
         const headers = {};
         if (tg?.initData) headers["X-Telegram-Init-Data"] = tg.initData;
         if (tg?.initDataUnsafe?.user) headers["X-Telegram-User"] = JSON.stringify(tg.initDataUnsafe.user);
-        const devUserId = localStorage.getItem("devUserId");
-        if (devUserId) headers["X-Dev-User-Id"] = devUserId;
         return headers;
       }
 
@@ -358,6 +377,29 @@
         return ({ open: "Відкрита", in_progress: "В роботі", completed: "Завершена" })[status] || status;
       }
 
+      function formatDateTime(dtRaw) {
+        if (!dtRaw) return "—";
+        const dt = new Date(dtRaw);
+        if (Number.isNaN(dt.getTime())) return "—";
+        return dt.toLocaleString("uk-UA");
+      }
+
+      function renderCabinetTaskCard(item) {
+        const roleStatus = selectedRole === "client"
+          ? `Статус заявки: ${translateTaskStatus(item.task_status)}`
+          : `Статус відгуку: ${translateBidStatus(item.bid_status || "pending")}`;
+        return `
+          <div class="master-card">
+            <div><strong>${item.title}</strong></div>
+            <div class="small">${item.category} • ${item.city} • ${item.budget} грн</div>
+            <div class="small">${roleStatus}</div>
+            ${item.selected_performer_name ? `<div class="small">Майстер: ${item.selected_performer_name}</div>` : ""}
+            ${item.selected_price ? `<div class="small">Ціна: ${item.selected_price} грн</div>` : ""}
+            <div class="small">Оновлено: ${formatDateTime(item.created_at)}</div>
+          </div>
+        `;
+      }
+
       async function openCabinet() {
         const isRegistered = selectedRole === "client"
           ? Boolean(currentUser?.is_client_registered)
@@ -368,42 +410,112 @@
         }
         const card = document.getElementById("cabinetCard");
         card.classList.remove("hidden");
-        card.innerHTML = "<h3>Кабінет</h3><div class='small'>Завантаження...</div>";
+        document.getElementById("performerProfileCard").classList.add("hidden");
+        card.innerHTML = "<h3>Мій кабінет</h3><div class='small'>Завантаження...</div>";
+        card.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        const meResp = await fetch(`${API_BASE}/api/me`, { headers: buildHeaders() });
+        if (meResp.ok) currentUser = await meResp.json();
 
         const resp = await fetch(`${API_BASE}/api/cabinet/tasks?mode=${selectedRole}`, { headers: buildHeaders() });
         if (!resp.ok) {
           const err = await resp.json();
-          card.innerHTML = `<h3>Кабінет</h3><div class='small'>${formatApiError(err.detail, "Не вдалося завантажити кабінет")}</div>`;
+          card.innerHTML = `<h3>Мій кабінет</h3><div class='small'>${formatApiError(err.detail, "Не вдалося завантажити кабінет")}</div>`;
           return;
         }
         const items = await resp.json();
-        const title = selectedRole === "client" ? "Мої заявки" : "Мої відгуки на заявки";
-        if (!items.length) {
-          card.innerHTML = `<h3>Кабінет</h3><div class="small">${title}: поки порожньо</div>`;
-          return;
-        }
+        const activeItems = items.filter((it) => {
+          if (selectedRole === "client") return it.task_status !== "completed";
+          return ["pending", "accepted"].includes(it.bid_status || "pending") && it.task_status !== "completed";
+        });
+        const completedItems = items.filter((it) => {
+          if (selectedRole === "client") return it.task_status === "completed";
+          return it.bid_status === "completed" || it.task_status === "completed";
+        });
+        const archiveItems = items.filter((it) => !activeItems.includes(it) && !completedItems.includes(it));
+
+        const profileLine = selectedRole === "client"
+          ? `Клієнт: ${currentUser?.full_name || "—"}`
+          : `Майстер: ${currentUser?.full_name || "—"}`;
+        const categoriesLine = selectedRole === "performer"
+          ? `<div class="small">Послуги: ${(currentUser?.performer_categories || []).join(", ") || "—"}</div>`
+          : "";
+        const addressLine = selectedRole === "client"
+          ? `<div class="small">Адреса: ${currentUser?.address || "—"}</div>`
+          : "";
+
         card.innerHTML = `
           <div class="row" style="align-items:center">
-            <h3 style="margin:0">Кабінет</h3>
+            <h3 style="margin:0">Мій кабінет</h3>
             <button id="closeCabinetBtn" class="btn-secondary">Закрити</button>
           </div>
-          <div class="small">${title}</div>
-          <div class="grid" style="margin-top:10px">
-            ${items.map((it) => `
-              <div class="master-card">
-                <div><strong>${it.title}</strong></div>
-                <div class="small">${it.category} • ${it.city} • ${it.budget} грн</div>
-                <div style="margin-top:6px"><span class="status-badge">${translateTaskStatus(it.task_status)}</span></div>
-                ${it.selected_performer_name ? `<div class="small">Майстер: ${it.selected_performer_name}</div>` : ""}
-                ${it.selected_price ? `<div class="small">Узгоджена ціна: ${it.selected_price} грн</div>` : ""}
-                ${it.bid_status ? `<div class="small">Статус відгуку: ${translateBidStatus(it.bid_status)}</div>` : ""}
+          <div class="card" style="margin-top:10px">
+            <div class="cabinet-profile">
+              <img id="cabinetProfilePhoto" class="cabinet-photo" src="${currentUser?.profile_photo_url || ""}" alt="Фото профілю" onerror="this.style.visibility='hidden'" />
+              <div>
+                <div><strong>${profileLine}</strong></div>
+                <div class="small">Телефон: ${currentUser?.phone || "—"}</div>
+                <div class="small">Місто: ${currentUser?.city || "—"}</div>
+                ${addressLine}
+                ${categoriesLine}
+                <div class="small" style="margin-top:10px">Фото профілю:</div>
+                <div class="row" style="grid-template-columns:1fr auto; margin-top:6px">
+                  <input id="cabinetPhotoInput" type="file" accept="image/*" />
+                  <button id="uploadCabinetPhotoBtn">Оновити фото</button>
+                </div>
+                <div id="cabinetPhotoStatus" class="small"></div>
               </div>
-            `).join("")}
+            </div>
+            <div class="cabinet-tabs">
+              <span class="chip">Профіль</span>
+              <span class="chip">Активні</span>
+              <span class="chip">Історія</span>
+            </div>
+          </div>
+          <div style="margin-top:12px"><strong>Активні</strong></div>
+          <div class="grid" style="margin-top:6px">
+            ${activeItems.length ? activeItems.map(renderCabinetTaskCard).join("") : `<div class="small">Поки немає активних записів</div>`}
+          </div>
+          <div style="margin-top:12px"><strong>Завершені</strong></div>
+          <div class="grid" style="margin-top:6px">
+            ${completedItems.length ? completedItems.map(renderCabinetTaskCard).join("") : `<div class="small">Поки немає завершених записів</div>`}
+          </div>
+          <div style="margin-top:12px"><strong>Архів</strong></div>
+          <div class="grid" style="margin-top:6px">
+            ${archiveItems.length ? archiveItems.map(renderCabinetTaskCard).join("") : `<div class="small">Архів порожній</div>`}
           </div>
         `;
         document.getElementById("closeCabinetBtn")?.addEventListener("click", () => {
           card.classList.add("hidden");
           card.innerHTML = "";
+        });
+        document.getElementById("uploadCabinetPhotoBtn")?.addEventListener("click", async () => {
+          const statusNode = document.getElementById("cabinetPhotoStatus");
+          const file = document.getElementById("cabinetPhotoInput").files?.[0];
+          if (!file) {
+            statusNode.textContent = "Оберіть фото";
+            return;
+          }
+          const formData = new FormData();
+          formData.append("profile_photo", file);
+          statusNode.textContent = "Оновлення...";
+          const r = await fetch(`${API_BASE}/api/me/photo`, {
+            method: "POST",
+            headers: buildHeaders(),
+            body: formData,
+          });
+          if (!r.ok) {
+            const err = await r.json();
+            statusNode.textContent = formatApiError(err.detail, "Не вдалося оновити фото");
+            return;
+          }
+          currentUser = await r.json();
+          statusNode.textContent = "Фото оновлено";
+          const photoNode = document.getElementById("cabinetProfilePhoto");
+          if (photoNode) {
+            photoNode.src = currentUser.profile_photo_url || "";
+            photoNode.style.visibility = "";
+          }
         });
       }
 

@@ -397,6 +397,22 @@ def get_me(
     return user_to_out(user)
 
 
+@app.post("/api/me/photo", response_model=UserOut)
+async def update_my_photo(
+    profile_photo: UploadFile = File(...),
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    user.profile_photo_url = await save_image(profile_photo)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user_to_out(user)
+
+
 @app.post("/api/telegram/link")
 def link_telegram_chat(
     telegram_id: int = Form(...),
