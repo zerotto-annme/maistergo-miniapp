@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Мінізастосунок послуг</title>
+    <link rel="icon" type="image/png" href="/static/logo-new.png" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --brand: #22C55E;
+        --brand-dark: #15803D;
+        --bg-soft: #F0FDF4;
+        --bg: #FFFFFF;
+        --card: #FFFFFF;
+        --text: #1f2a37;
+        --muted: #4b5563;
+        --border: #bbf7d0;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      .container { max-width: 920px; margin: 0 auto; padding: 20px; }
+      .top-bar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+      .cabinet-btn { width: auto; min-width: 140px; }
+      h1 { margin: 0 0 10px; font-size: 28px; }
+      .subtitle { color: var(--muted); margin-bottom: 16px; }
+      .grid { display: grid; gap: 14px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 8px 22px rgba(31, 41, 55, 0.08);
+      }
+      input, textarea, button, select {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 15px;
+      }
+      input, textarea, select { background: #fff; color: var(--text); }
+      textarea { min-height: 80px; resize: vertical; }
+      button {
+        background: var(--brand);
+        color: #fff;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        border-radius: 14px;
+        min-height: 52px;
+      }
+      button:hover { background: var(--brand-dark); }
+      .btn-outline {
+        background: #fff;
+        color: var(--brand-dark);
+        border: 2px solid var(--brand);
+      }
+      .btn-outline:hover {
+        background: var(--bg-soft);
+      }
+      .task-title { font-size: 19px; font-weight: 700; margin-bottom: 6px; }
+      .meta { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+      .btn-secondary { background: #fff; color: var(--brand-dark); border: 1px solid var(--brand); }
+      .small { font-size: 13px; color: var(--muted); margin-top: 8px; }
+      .hidden { display: none; }
+      .photo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
+      .photo-grid img { width: 100%; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+      .chip { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #eef3f8; color: #31455a; font-size: 12px; margin-right: 6px; }
+      .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .check-item { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+      .check-item input { width: auto; margin: 0; }
+      .hero-title { margin: 0 0 10px; font-size: 32px; }
+      .brand-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
+      .brand-logo { max-width: 420px; width: 100%; height: auto; }
+      .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .quick-btn { font-size: 18px; }
+      .master-card {
+        margin-top: 8px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        background: #fff;
+      }
+      .master-head { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; }
+      .master-avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 1px solid var(--border);
+        background: var(--bg-soft);
+      }
+      .profile-card .master-avatar { width: 82px; height: 82px; }
+      .muted { color: var(--muted); }
+      .status-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: var(--bg-soft); color: var(--brand-dark); font-size: 12px; font-weight: 700; }
+      @media (max-width: 720px) {
+        .row { grid-template-columns: 1fr; }
+        .actions { grid-template-columns: 1fr; }
+        .photo-grid { grid-template-columns: repeat(3, 1fr); }
+        .checks { grid-template-columns: 1fr; }
+        .quick-grid { grid-template-columns: 1fr; }
+        .master-head { grid-template-columns: 56px 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="top-bar">
+        <button id="cabinetBtn" class="cabinet-btn btn-secondary">Кабінет</button>
+      </div>
+      <div class="brand-wrap">
+        <img class="brand-logo" src="/static/logo-new.png" alt="МайстерGO" />
+      </div>
+      <h1 class="hero-title">Послуги поруч</h1>
+      <div class="subtitle">Оберіть, хто ви</div>
+
+      <section id="landingCard" class="card" style="margin-bottom:14px; background:var(--bg-soft)">
+        <div class="grid">
+          <button id="startClientBtn">Я шукаю Майстра</button>
+          <button id="startPerformerBtn" class="btn-outline">Я Майстер</button>
+        </div>
+      </section>
+
+      <div id="appContent" class="hidden">
+      <section id="quickSection" class="card hidden" style="margin-bottom:14px; background:var(--bg-soft)">
+        <h3>Що потрібно зробити?</h3>
+        <div class="quick-grid">
+          <button id="quickPlumber" class="quick-btn">🔧 Сантехнік</button>
+          <button id="quickElectric" class="quick-btn">⚡ Електрик</button>
+          <button id="quickRepair" class="quick-btn">🏠 Ремонт</button>
+          <button id="quickOther" class="quick-btn btn-outline">🔨 Інше</button>
+        </div>
+      </section>
+      <section id="devSection" class="card" style="margin-bottom:14px">
+        <h3>Dev режим</h3>
+        <div class="row">
+          <input id="devUserId" type="number" placeholder="Dev User ID (наприклад 1001 або 2002)" />
+          <button id="applyDevUser">Змінити користувача</button>
+        </div>
+        <div class="small">Для локального тесту різних ролей. У Telegram ігнорується.</div>
+      </section>
+
+      <section id="registrationCard" class="card hidden">
+        <h3>Реєстрація</h3>
+        <div class="grid">
+          <select id="roleSelect" class="hidden">
+            <option value="client">Я шукаю послугу</option>
+            <option value="performer">Я виконавець послуг</option>
+          </select>
+          <input id="fullName" placeholder="Ім'я" />
+          <input id="phone" placeholder="Номер телефону" />
+          <input id="profileCity" placeholder="Місто" />
+          <input id="address" placeholder="Адреса (обов'язково)" />
+          <div id="performerCategoriesWrap" class="hidden">
+            <div class="small" style="margin-bottom:8px">Оберіть послуги, які надаєте:</div>
+            <div id="performerCategories"></div>
+            <div class="small" style="margin-top:10px; margin-bottom:6px">Ваше фото (обов'язково)</div>
+            <input id="performerPhoto" type="file" accept="image/*" style="margin-top:8px" />
+            <div class="small">Для виконавця фото анкети обов'язкове.</div>
+          </div>
+          <button id="registerBtn">Завершити реєстрацію</button>
+          <div class="small" id="registerStatus"></div>
+          <div class="small">Виконавець буде бачити лише заявки зі своїх категорій.</div>
+        </div>
+      </section>
+
+      <section id="filtersCard" class="card hidden" style="margin-top:14px; margin-bottom:14px">
+        <h3>Пошук і фільтри</h3>
+        <div class="grid">
+          <div class="row">
+            <select id="filterCategory">
+              <option value="">Усі категорії</option>
+            </select>
+            <input id="filterCity" placeholder="Місто" />
+          </div>
+          <div class="row">
+            <input id="filterMinBudget" type="number" placeholder="Бюджет від, грн" />
+            <input id="filterMaxBudget" type="number" placeholder="Бюджет до, грн" />
+          </div>
+          <div class="actions">
+            <button id="applyFilters">Застосувати фільтри</button>
+            <button id="resetFilters" class="btn-secondary">Скинути</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="createTaskCard" class="card hidden">
+        <h3>Запропонувати роботу</h3>
+        <div class="grid">
+          <input id="title" placeholder="Наприклад: Полагодити кран" />
+          <textarea id="description" placeholder="Опишіть завдання детальніше"></textarea>
+          <div class="small" style="margin-bottom:2px; font-weight:700">Оберіть категорії робіт</div>
+          <div id="taskCategories" class="checks"></div>
+          <div class="row">
+            <input id="city" placeholder="Місто (Київ)" />
+          </div>
+          <input id="budget" type="number" placeholder="Бюджет, грн" />
+          <input id="photos" type="file" accept="image/*" multiple />
+          <div class="small">Можна додати до 10 фото.</div>
+          <button id="createTask">Опублікувати</button>
+        </div>
+      </section>
+
+      <section style="margin-top:14px">
+        <div id="performerHomeCard" class="card hidden" style="margin-bottom:14px"></div>
+        <div id="cabinetCard" class="card hidden" style="margin-bottom:14px"></div>
+        <div id="performerProfileCard" class="card hidden profile-card" style="margin-bottom:14px"></div>
+        <div id="tasks" class="grid"></div>
+      </section>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+      }
+
+      const API_BASE = "";
+      let currentUser = null;
+      let serviceCategories = [];
+      let appStarted = false;
+      let selectedRole = "client";
+
+      function buildHeaders() {
+        const headers = {};
+        if (tg?.initData) headers["X-Telegram-Init-Data"] = tg.initData;
+        if (tg?.initDataUnsafe?.user) headers["X-Telegram-User"] = JSON.stringify(tg.initDataUnsafe.user);
+        const devUserId = localStorage.getItem("devUserId");
+        if (devUserId) headers["X-Dev-User-Id"] = devUserId;
+        return headers;
+      }
+
+      function formatApiError(detail, fallbackText) {
+        if (!detail) return fallbackText;
+        if (typeof detail === "string") return detail;
+        if (Array.isArray(detail)) {
+          const first = detail[0];
+          if (typeof first === "string") return first;
+          if (first?.msg) return first.msg;
+          return fallbackText;
+        }
+        if (detail?.msg) return detail.msg;
+        return fallbackText;
+      }
+
+      function renderCategoryOptions() {
+        const taskWrap = document.getElementById("taskCategories");
+        taskWrap.innerHTML = serviceCategories
+          .map(
+            (c) => `
+            <label class="check-item">
+              <input type="checkbox" value="${c}" name="task-category" />
+              <span>${c}</span>
+            </label>
+          `
+          )
+          .join("");
+        const filterSelect = document.getElementById("filterCategory");
+        filterSelect.innerHTML = `<option value="">Усі категорії</option>${serviceCategories
+          .map((c) => `<option value="${c}">${c}</option>`)
+          .join("")}`;
+
+        const wrap = document.getElementById("performerCategories");
+        wrap.className = "checks";
+        wrap.innerHTML = serviceCategories
+          .map(
+            (c) => `
+            <label class="check-item">
+              <input type="checkbox" value="${c}" name="performer-category" />
+              <span>${c}</span>
+            </label>
+          `
+          )
+          .join("");
+      }
+
+      async function fetchServiceCategories() {
+        const res = await fetch(`${API_BASE}/api/service-categories`);
+        if (!res.ok) {
+          alert("Не вдалося завантажити категорії послуг");
+          return;
+        }
+        serviceCategories = await res.json();
+        renderCategoryOptions();
+      }
+
+      function buildTaskFiltersQuery() {
+        const params = new URLSearchParams();
+        const category = document.getElementById("filterCategory").value.trim();
+        const city = document.getElementById("filterCity").value.trim();
+        const minBudget = document.getElementById("filterMinBudget").value.trim();
+        const maxBudget = document.getElementById("filterMaxBudget").value.trim();
+        if (category) params.set("category", category);
+        if (city) params.set("city", city);
+        if (minBudget) params.set("min_budget", minBudget);
+        if (maxBudget) params.set("max_budget", maxBudget);
+        const query = params.toString();
+        return query ? `?${query}` : "";
+      }
+
+      function showByRole() {
+        if (!appStarted) {
+          document.getElementById("appContent").classList.add("hidden");
+          document.getElementById("landingCard").classList.remove("hidden");
+          return;
+        }
+        document.getElementById("appContent").classList.remove("hidden");
+        document.getElementById("landingCard").classList.add("hidden");
+        const isRegistered = selectedRole === "client"
+          ? Boolean(currentUser?.is_client_registered)
+          : Boolean(currentUser?.is_performer_registered);
+        document.getElementById("registrationCard").classList.toggle("hidden", isRegistered);
+        document.getElementById("quickSection").classList.add("hidden");
+        document.getElementById("filtersCard").classList.add("hidden");
+        document.getElementById("createTaskCard").classList.toggle("hidden", !isRegistered || selectedRole !== "client");
+        document.getElementById("devSection").classList.toggle("hidden", selectedRole !== "client");
+        document.getElementById("performerHomeCard").classList.toggle("hidden", !isRegistered || selectedRole !== "performer");
+        document.getElementById("cabinetBtn").classList.toggle("hidden", !isRegistered);
+        if (!isRegistered) {
+          document.getElementById("performerProfileCard").classList.add("hidden");
+          document.getElementById("cabinetCard").classList.add("hidden");
+          document.getElementById("performerHomeCard").classList.add("hidden");
+          if (selectedRole) {
+            const roleSelect = document.getElementById("roleSelect");
+            roleSelect.value = selectedRole;
+            roleSelect.dispatchEvent(new Event("change"));
+          }
+          document.getElementById("tasks").innerHTML = "";
+        } else if (selectedRole === "performer") {
+          renderPerformerHome();
+        }
+      }
+
+      function startRoleFlow(role) {
+        appStarted = true;
+        selectedRole = role;
+        showByRole();
+        const isRegistered = role === "client"
+          ? Boolean(currentUser?.is_client_registered)
+          : Boolean(currentUser?.is_performer_registered);
+        if (isRegistered) {
+          fetchTasks();
+        }
+      }
+
+      function renderPerformerHome() {
+        const node = document.getElementById("performerHomeCard");
+        node.classList.remove("hidden");
+        node.innerHTML = `
+          <h3 style="margin-top:0">Профіль майстра</h3>
+          <div class="small">Майстер: ${currentUser?.full_name || "—"}</div>
+          <div class="small">Категорії: ${(currentUser?.performer_categories || []).join(", ") || "—"}</div>
+          <div class="small">Тут автоматично з'являються заявки за вашим профілем.</div>
+        `;
+      }
+
+      function translateTaskStatus(status) {
+        return ({ open: "Відкрита", in_progress: "В роботі", completed: "Завершена" })[status] || status;
+      }
+
+      async function openCabinet() {
+        const isRegistered = selectedRole === "client"
+          ? Boolean(currentUser?.is_client_registered)
+          : Boolean(currentUser?.is_performer_registered);
+        if (!isRegistered) {
+          alert("Спочатку завершіть реєстрацію у вибраному кабінеті");
+          return;
+        }
+        const card = document.getElementById("cabinetCard");
+        card.classList.remove("hidden");
+        card.innerHTML = "<h3>Кабінет</h3><div class='small'>Завантаження...</div>";
+
+        const resp = await fetch(`${API_BASE}/api/cabinet/tasks?mode=${selectedRole}`, { headers: buildHeaders() });
+        if (!resp.ok) {
+          const err = await resp.json();
+          card.innerHTML = `<h3>Кабінет</h3><div class='small'>${formatApiError(err.detail, "Не вдалося завантажити кабінет")}</div>`;
+          return;
+        }
+        const items = await resp.json();
+        const title = selectedRole === "client" ? "Мої заявки" : "Мої відгуки на заявки";
+        if (!items.length) {
+          card.innerHTML = `<h3>Кабінет</h3><div class="small">${title}: поки порожньо</div>`;
+          return;
+        }
+        card.innerHTML = `
+          <div class="row" style="align-items:center">
+            <h3 style="margin:0">Кабінет</h3>
+            <button id="closeCabinetBtn" class="btn-secondary">Закрити</button>
+          </div>
+          <div class="small">${title}</div>
+          <div class="grid" style="margin-top:10px">
+            ${items.map((it) => `
+              <div class="master-card">
+                <div><strong>${it.title}</strong></div>
+                <div class="small">${it.category} • ${it.city} • ${it.budget} грн</div>
+                <div style="margin-top:6px"><span class="status-badge">${translateTaskStatus(it.task_status)}</span></div>
+                ${it.selected_performer_name ? `<div class="small">Майстер: ${it.selected_performer_name}</div>` : ""}
+                ${it.selected_price ? `<div class="small">Узгоджена ціна: ${it.selected_price} грн</div>` : ""}
+                ${it.bid_status ? `<div class="small">Статус відгуку: ${translateBidStatus(it.bid_status)}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `;
+        document.getElementById("closeCabinetBtn")?.addEventListener("click", () => {
+          card.classList.add("hidden");
+          card.innerHTML = "";
+        });
+      }
+
+      async function fetchMe() {
+        const res = await fetch(`${API_BASE}/api/me`, { headers: buildHeaders() });
+        if (!res.ok) {
+          alert("Не вдалося завантажити профіль");
+          return;
+        }
+        currentUser = await res.json();
+        showByRole();
+        if (
+          appStarted &&
+          ((selectedRole === "client" && currentUser?.is_client_registered) ||
+            (selectedRole === "performer" && currentUser?.is_performer_registered))
+        ) {
+          fetchTasks();
+        }
+      }
+
+      async function registerUser() {
+        const registerStatus = document.getElementById("registerStatus");
+        registerStatus.textContent = "";
+        const role = selectedRole;
+        const fullName = document.getElementById("fullName").value.trim();
+        const phone = document.getElementById("phone").value.trim();
+        const city = document.getElementById("profileCity").value.trim();
+        const address = role === "client" ? document.getElementById("address").value.trim() : "";
+        const categories = Array.from(document.querySelectorAll("input[name='performer-category']:checked"))
+          .map((el) => el.value);
+        const performerPhoto = document.getElementById("performerPhoto").files?.[0];
+
+        if (role === "performer" && !performerPhoto) {
+          registerStatus.textContent = "Для виконавця фото обов'язкове";
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("role", role);
+        formData.append("full_name", fullName);
+        formData.append("phone", phone);
+        formData.append("city", city);
+        formData.append("address", address);
+        categories.forEach((c) => formData.append("categories", c));
+        if (performerPhoto) formData.append("profile_photo", performerPhoto);
+
+        try {
+          registerStatus.textContent = "Реєстрація...";
+          const res = await fetch(`${API_BASE}/api/register`, {
+            method: "POST",
+            headers: buildHeaders(),
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            registerStatus.textContent = formatApiError(err.detail, "Помилка реєстрації");
+            return;
+          }
+
+          currentUser = await res.json();
+          registerStatus.textContent = "Реєстрацію завершено";
+          showByRole();
+          fetchTasks();
+        } catch (e) {
+          registerStatus.textContent = "Помилка мережі. Перевірте тунель і спробуйте ще раз.";
+        }
+      }
+
+      async function fetchTasks() {
+        const isRegistered = selectedRole === "client"
+          ? Boolean(currentUser?.is_client_registered)
+          : Boolean(currentUser?.is_performer_registered);
+        if (!isRegistered) return;
+        const query = "";
+        const modeSep = query ? "&" : "?";
+        const res = await fetch(`${API_BASE}/api/tasks${query}${modeSep}mode=${selectedRole}`, { headers: buildHeaders() });
+        const root = document.getElementById("tasks");
+        if (!res.ok) {
+          const err = await res.json();
+          root.innerHTML = `<div class="card">${formatApiError(err.detail, "Помилка завантаження")}</div>`;
+          return;
+        }
+
+        const tasks = await res.json();
+        root.innerHTML = "";
+        if (!tasks.length) {
+          root.innerHTML = selectedRole === "performer"
+            ? `<div class="card">Поки немає нових заявок у ваших категоріях.</div>`
+            : `<div class="card">За вашим фільтром завдань поки немає.</div>`;
+          return;
+        }
+
+        for (const task of tasks) {
+          const photosHtml = (task.photos || []).length
+            ? `<div class="photo-grid">${task.photos.map((u) => `<img src="${u}" alt="Фото завдання" />`).join("")}</div>`
+            : "";
+
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <div class="task-title">${task.title}</div>
+            <div class="meta">${task.category} • ${task.city} • ${task.budget} грн • Статус: ${task.status}</div>
+            <div>${task.description}</div>
+            ${photosHtml}
+            ${selectedRole === "performer" ? `
+              <div class="bid-form" style="margin-top:10px">
+                <div style="font-weight:700; margin-bottom:6px">Ціна яку пропоную</div>
+                <input id="price-${task.id}" type="number" placeholder="Ваша ціна" />
+                <button style="margin-top:8px" data-task-id="${task.id}">Відгукнутися</button>
+                <div class="small" id="status-${task.id}"></div>
+                <div class="small" id="performer-contact-${task.id}"></div>
+              </div>
+            ` : `<div class="small"><span class="chip">Ваше завдання</span>Нижче відображаються відгуки виконавців.</div><div class="small" id="bids-${task.id}">Завантаження відгуків...</div>`}
+          `;
+
+          if (selectedRole === "performer") {
+            const bidButton = card.querySelector("button");
+            bidButton.addEventListener("click", async () => {
+              const price = Number(document.getElementById(`price-${task.id}`).value);
+              const status = document.getElementById(`status-${task.id}`);
+
+              const resp = await fetch(`${API_BASE}/api/tasks/${task.id}/bids`, {
+                method: "POST",
+                headers: { ...buildHeaders(), "Content-Type": "application/json" },
+                body: JSON.stringify({ price }),
+              });
+
+              if (resp.ok) {
+                status.textContent = "Відгук надіслано";
+                await loadPerformerTaskState(task.id, status, card.querySelector(`#performer-contact-${task.id}`));
+              } else {
+                const err = await resp.json();
+                status.textContent = formatApiError(err.detail, "Помилка");
+              }
+            });
+            loadPerformerTaskState(task.id, card.querySelector(`#status-${task.id}`), card.querySelector(`#performer-contact-${task.id}`));
+          } else {
+            loadTaskBids(task.id, card.querySelector(`#bids-${task.id}`));
+          }
+
+          root.appendChild(card);
+        }
+      }
+
+      async function loadTaskBids(taskId, node) {
+        const resp = await fetch(`${API_BASE}/api/tasks/${taskId}/bids?mode=client`, { headers: buildHeaders() });
+        if (!resp.ok) {
+          node.textContent = "Не вдалося завантажити відгуки";
+          return;
+        }
+        const bids = await resp.json();
+        if (!bids.length) {
+          node.textContent = "Поки що немає відгуків";
+          return;
+        }
+        node.innerHTML = bids
+          .map((b) => `
+            <div class="master-card">
+              <div class="master-head">
+                <img class="master-avatar" src="${b.performer_photo_url || ""}" alt="Фото майстра" onerror="this.style.visibility='hidden'" />
+                <div>
+                  <div><strong>Майстер: ${b.performer_name || "Без імені"}</strong></div>
+                  <div class="small">Рейтинг: ${b.performer_rating ?? 0} • Виконано: ${b.performer_completed_jobs ?? 0}</div>
+                </div>
+                <button class="profile-btn btn-outline" data-performer-id="${b.performer_id}">Профіль</button>
+              </div>
+              <div class="small">${b.price} грн${b.message ? ` • ${b.message}` : ""}</div>
+              <div class="small">Статус: ${translateBidStatus(b.status)}</div>
+              <div class="row" style="margin-top:8px">
+                ${b.status === "pending" ? `<button class="accept-bid-btn" data-bid-id="${b.id}">Обрати майстра</button>` : ""}
+                ${b.status === "accepted" ? `<button class="complete-bid-btn" data-bid-id="${b.id}">Робота виконана</button>` : ""}
+              </div>
+              ${b.status === "completed" && !b.has_review ? `
+                <div class="row" style="margin-top:8px">
+                  <select id="rating-${b.id}">
+                    <option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option>
+                  </select>
+                  <input id="review-${b.id}" placeholder="Ваш відгук про якість роботи" />
+                </div>
+                <button class="review-bid-btn" data-bid-id="${b.id}" style="margin-top:8px">Залишити оцінку</button>
+              ` : ""}
+              ${b.has_review ? `<div class="small">Відгук вже залишено</div>` : ""}
+            </div>
+          `)
+          .join("");
+        node.querySelectorAll(".profile-btn").forEach((btn) => {
+          btn.addEventListener("click", () => openPerformerProfile(btn.dataset.performerId));
+        });
+        node.querySelectorAll(".accept-bid-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const r = await fetch(`${API_BASE}/api/bids/${btn.dataset.bidId}/accept`, { method: "POST", headers: buildHeaders() });
+            if (!r.ok) {
+              const err = await r.json();
+              alert(formatApiError(err.detail, "Не вдалося погодити"));
+              return;
+            }
+            fetchTasks();
+          });
+        });
+        node.querySelectorAll(".complete-bid-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const r = await fetch(`${API_BASE}/api/bids/${btn.dataset.bidId}/complete`, { method: "POST", headers: buildHeaders() });
+            if (!r.ok) {
+              const err = await r.json();
+              alert(formatApiError(err.detail, "Не вдалося завершити"));
+              return;
+            }
+            fetchTasks();
+          });
+        });
+        node.querySelectorAll(".review-bid-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const bidId = btn.dataset.bidId;
+            const rating = Number(document.getElementById(`rating-${bidId}`).value);
+            const comment = document.getElementById(`review-${bidId}`).value;
+            const r = await fetch(`${API_BASE}/api/bids/${bidId}/review`, {
+              method: "POST",
+              headers: { ...buildHeaders(), "Content-Type": "application/json" },
+              body: JSON.stringify({ rating, comment }),
+            });
+            if (!r.ok) {
+              const err = await r.json();
+              alert(formatApiError(err.detail, "Не вдалося зберегти відгук"));
+              return;
+            }
+            fetchTasks();
+          });
+        });
+      }
+
+      function translateBidStatus(status) {
+        return ({ pending: "Очікує рішення клієнта", accepted: "Узгоджено", completed: "Завершено", rejected: "Відхилено" })[status] || status;
+      }
+
+      async function openPerformerProfile(performerId) {
+        const r = await fetch(`${API_BASE}/api/performers/${performerId}/profile`, { headers: buildHeaders() });
+        if (!r.ok) {
+          const err = await r.json();
+          alert(formatApiError(err.detail, "Не вдалося відкрити профіль"));
+          return;
+        }
+        const p = await r.json();
+        const card = document.getElementById("performerProfileCard");
+        card.classList.remove("hidden");
+        card.innerHTML = `
+          <div class="master-head">
+            <img class="master-avatar" src="${p.profile_photo_url || ""}" alt="Фото майстра" onerror="this.style.visibility='hidden'" />
+            <div>
+              <h3 style="margin:0">${p.full_name || "Майстер"}</h3>
+              <div class="muted">${p.city || ""}</div>
+              <div class="small">Рейтинг: ${p.rating_avg} • Виконано робіт: ${p.completed_jobs}</div>
+            </div>
+            <button class="btn-secondary" id="closeProfileBtn">Закрити</button>
+          </div>
+          <div class="small">Послуги: ${(p.categories || []).join(", ")}</div>
+          <div style="margin-top:8px"><strong>Відгуки:</strong></div>
+          <div class="small">${(p.reviews || []).length ? p.reviews.map((rv) => `• ${rv.rating}/5 — ${rv.comment}`).join("<br/>") : "Поки що відгуків немає"}</div>
+        `;
+        document.getElementById("closeProfileBtn").addEventListener("click", () => {
+          card.classList.add("hidden");
+          card.innerHTML = "";
+        });
+      }
+
+      async function loadPerformerTaskState(taskId, statusNode, contactNode) {
+        const resp = await fetch(`${API_BASE}/api/tasks/${taskId}/bids?mode=performer`, { headers: buildHeaders() });
+        if (!resp.ok) return;
+        const bids = await resp.json();
+        if (!bids.length) return;
+        const myBid = bids[0];
+        statusNode.textContent = `Мій відгук: ${translateBidStatus(myBid.status)} (${myBid.price} грн)`;
+        if (myBid.status === "accepted" || myBid.status === "completed") {
+          const contactResp = await fetch(`${API_BASE}/api/bids/${myBid.id}/client-contact`, { headers: buildHeaders() });
+          if (contactResp.ok) {
+            const c = await contactResp.json();
+            contactNode.innerHTML = `Контакти клієнта: ${c.full_name || ""}, ${c.phone || ""}, ${c.city || ""}, ${c.address || ""}`;
+          }
+        }
+      }
+
+      async function createTask() {
+        const files = Array.from(document.getElementById("photos").files || []);
+        const selectedTaskCategories = Array.from(document.querySelectorAll("input[name='task-category']:checked"))
+          .map((el) => el.value);
+        if (!selectedTaskCategories.length) {
+          alert("Оберіть хоча б одну категорію робіт");
+          return;
+        }
+        if (files.length > 10) {
+          alert("Можна додати максимум 10 фото");
+          return;
+        }
+        for (const category of selectedTaskCategories) {
+          const formData = new FormData();
+          formData.append("title", document.getElementById("title").value);
+          formData.append("description", document.getElementById("description").value);
+          formData.append("category", category);
+          formData.append("city", document.getElementById("city").value);
+          formData.append("budget", document.getElementById("budget").value);
+          files.forEach((f) => formData.append("photos", f));
+
+          const res = await fetch(`${API_BASE}/api/tasks`, {
+            method: "POST",
+            headers: buildHeaders(),
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            alert(formatApiError(err.detail, "Помилка створення завдання"));
+            return;
+          }
+        }
+
+        document.getElementById("title").value = "";
+        document.getElementById("description").value = "";
+        document.getElementById("city").value = "";
+        document.getElementById("budget").value = "";
+        document.getElementById("photos").value = "";
+        document.querySelectorAll("input[name='task-category']").forEach((el) => { el.checked = false; });
+        fetchTasks();
+      }
+
+      document.getElementById("roleSelect").addEventListener("change", (e) => {
+        const isPerformer = e.target.value === "performer";
+        document.getElementById("performerCategoriesWrap").classList.toggle("hidden", !isPerformer);
+        const addressInput = document.getElementById("address");
+        addressInput.classList.toggle("hidden", isPerformer);
+        if (!isPerformer) addressInput.placeholder = "Адреса (обов'язково)";
+      });
+      document.getElementById("roleSelect").dispatchEvent(new Event("change"));
+      document.getElementById("startClientBtn").addEventListener("click", () => startRoleFlow("client"));
+      document.getElementById("startPerformerBtn").addEventListener("click", () => startRoleFlow("performer"));
+      document.getElementById("cabinetBtn").addEventListener("click", openCabinet);
+      document.getElementById("registerBtn").addEventListener("click", registerUser);
+      document.getElementById("createTask").addEventListener("click", createTask);
+      document.getElementById("devUserId").value = localStorage.getItem("devUserId") || "";
+      document.getElementById("applyDevUser").addEventListener("click", () => {
+        const devId = document.getElementById("devUserId").value.trim();
+        if (devId) localStorage.setItem("devUserId", devId);
+        else localStorage.removeItem("devUserId");
+        location.reload();
+      });
+      document.getElementById("applyFilters").addEventListener("click", fetchTasks);
+      document.getElementById("resetFilters").addEventListener("click", () => {
+        document.getElementById("filterCategory").value = "";
+        document.getElementById("filterCity").value = "";
+        document.getElementById("filterMinBudget").value = "";
+        document.getElementById("filterMaxBudget").value = "";
+        fetchTasks();
+      });
+      document.getElementById("quickPlumber").addEventListener("click", () => {
+        document.getElementById("filterCategory").value = "Сантехника";
+        fetchTasks();
+      });
+      document.getElementById("quickElectric").addEventListener("click", () => {
+        document.getElementById("filterCategory").value = "Электрика";
+        fetchTasks();
+      });
+      document.getElementById("quickRepair").addEventListener("click", () => {
+        document.getElementById("filterCategory").value = "Малярные работы";
+        fetchTasks();
+      });
+      document.getElementById("quickOther").addEventListener("click", () => {
+        document.getElementById("filterCategory").value = "";
+        fetchTasks();
+      });
+
+      Promise.all([fetchServiceCategories(), fetchMe()]);
+    </script>
+  </body>
+</html>
