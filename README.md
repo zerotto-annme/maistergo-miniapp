@@ -35,7 +35,7 @@ uvicorn app.main:app --reload
 
 1. У `.env` додай:
    - `TELEGRAM_BOT_TOKEN=...`
-   - `MINI_APP_URL=https://your-public-url`
+   - `WEBAPP_URL=https://your-public-url`
 2. Запусти бота:
 
 ```bash
