@@ -139,15 +139,6 @@
           <button id="quickOther" class="quick-btn btn-outline">🔨 Інше</button>
         </div>
       </section>
-      <section id="devSection" class="card" style="margin-bottom:14px">
-        <h3>Dev режим</h3>
-        <div class="row">
-          <input id="devUserId" type="number" placeholder="Dev User ID (наприклад 1001 або 2002)" />
-          <button id="applyDevUser">Змінити користувача</button>
-        </div>
-        <div class="small">Для локального тесту різних ролей. У Telegram ігнорується.</div>
-      </section>
-
       <section id="registrationCard" class="card hidden">
         <h3>Реєстрація</h3>
         <div class="grid">
@@ -323,7 +314,6 @@
         document.getElementById("quickSection").classList.add("hidden");
         document.getElementById("filtersCard").classList.add("hidden");
         document.getElementById("createTaskCard").classList.toggle("hidden", !isRegistered || selectedRole !== "client");
-        document.getElementById("devSection").classList.toggle("hidden", selectedRole !== "client");
         document.getElementById("performerHomeCard").classList.toggle("hidden", !isRegistered || selectedRole !== "performer");
         document.getElementById("cabinetBtn").classList.toggle("hidden", !isRegistered);
         if (!isRegistered) {
@@ -751,13 +741,6 @@
       document.getElementById("cabinetBtn").addEventListener("click", openCabinet);
       document.getElementById("registerBtn").addEventListener("click", registerUser);
       document.getElementById("createTask").addEventListener("click", createTask);
-      document.getElementById("devUserId").value = localStorage.getItem("devUserId") || "";
-      document.getElementById("applyDevUser").addEventListener("click", () => {
-        const devId = document.getElementById("devUserId").value.trim();
-        if (devId) localStorage.setItem("devUserId", devId);
-        else localStorage.removeItem("devUserId");
-        location.reload();
-      });
       document.getElementById("applyFilters").addEventListener("click", fetchTasks);
       document.getElementById("resetFilters").addEventListener("click", () => {
         document.getElementById("filterCategory").value = "";

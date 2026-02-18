@@ -2,7 +2,15 @@ import os
 from urllib import parse, request
 
 from dotenv import load_dotenv
-from telegram import KeyboardButton, ReplyKeyboardMarkup, Update, WebAppInfo
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    MenuButtonWebApp,
+    ReplyKeyboardMarkup,
+    Update,
+    WebAppInfo,
+)
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 load_dotenv()
@@ -41,18 +49,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         resize_keyboard=True,
         is_persistent=True,
     )
+    inline_keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(text="Відкрити МайстерGO", web_app=WebAppInfo(url=MINI_APP_URL))]]
+    )
 
     await update.message.reply_text(
-        "Натисніть кнопку нижче, щоб відкрити МайстерGO:",
+        "Натисніть кнопку, щоб одразу відкрити МайстерGO:",
+        reply_markup=inline_keyboard,
+    )
+    await update.message.reply_text(
+        "Також закріпив кнопку МайстерGO внизу чату:",
         reply_markup=keyboard,
     )
+
+
+async def post_init(application: Application) -> None:
+    if not MINI_APP_URL:
+        return
+    try:
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text="МайстерGO", web_app=WebAppInfo(url=MINI_APP_URL))
+        )
+    except Exception:
+        return
 
 
 def run() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN не задано у .env")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.run_polling(close_loop=False)
 
