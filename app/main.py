@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -29,6 +30,8 @@ from .schemas import (
 )
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DEV_BYPASS_AUTH = os.getenv("DEV_BYPASS_AUTH", "true").lower() == "true"
@@ -88,6 +91,7 @@ def ensure_legacy_columns() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32)"))
         if "performer_categories_json" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN performer_categories_json TEXT DEFAULT '[]'"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_id ON users(telegram_id)"))
 
         task_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tasks)"))}
         if "photos_json" not in task_cols:
@@ -230,6 +234,13 @@ def get_or_create_user(
 
     user = db.query(User).filter(User.telegram_id == telegram_id).first()
     if user:
+        logger.info(
+            "auth_lookup telegram_id=%s found=true client_registered=%s performer_registered=%s role=%s",
+            telegram_id,
+            bool(user.is_client_registered),
+            bool(user.is_performer_registered),
+            user.role,
+        )
         # Keep Telegram identity data fresh without forcing manual re-registration.
         user.username = user_payload.get("username") or user.username
         user.first_name = user_payload.get("first_name") or user.first_name
@@ -258,6 +269,7 @@ def get_or_create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    logger.info("auth_lookup telegram_id=%s found=false created=true", telegram_id)
     return user
 
 
@@ -270,7 +282,9 @@ def authorize(
     if x_telegram_init_data and BOT_TOKEN:
         is_valid = validate_telegram_init_data(x_telegram_init_data, BOT_TOKEN)
         if not is_valid:
+            logger.warning("telegram_init_data_validation failed")
             raise HTTPException(status_code=401, detail="Некоректна авторизація Telegram")
+        logger.info("telegram_init_data_validation ok")
         return get_or_create_user(db, x_telegram_user, x_telegram_init_data, x_dev_user_id)
 
     if DEV_BYPASS_AUTH:
@@ -381,6 +395,16 @@ def web_app():
         return f.read()
 
 
+@app.get("/app", response_class=HTMLResponse)
+def web_app_path():
+    return web_app()
+
+
+@app.get("/register", response_class=HTMLResponse)
+def web_register_path():
+    return web_app()
+
+
 @app.get("/api/service-categories", response_model=list[str])
 def service_categories():
     return ALLOWED_SERVICE_CATEGORIES
@@ -394,6 +418,13 @@ def get_me(
     db: Session = Depends(get_db),
 ):
     user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    logger.info(
+        "get_me telegram_id=%s client_registered=%s performer_registered=%s role=%s",
+        user.telegram_id,
+        bool(user.is_client_registered),
+        bool(user.is_performer_registered),
+        user.role,
+    )
     return user_to_out(user)
 
 
@@ -481,6 +512,13 @@ async def register(
     db.add(user)
     db.commit()
     db.refresh(user)
+    logger.info(
+        "register_success telegram_id=%s role=%s client_registered=%s performer_registered=%s",
+        user.telegram_id,
+        role_clean,
+        bool(user.is_client_registered),
+        bool(user.is_performer_registered),
+    )
     return user_to_out(user)
 
 

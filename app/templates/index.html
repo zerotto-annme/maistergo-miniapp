@@ -121,6 +121,14 @@
         gap: 8px;
         margin-top: 10px;
       }
+      .splash {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 160px;
+        gap: 10px;
+      }
       @media (max-width: 720px) {
         .row { grid-template-columns: 1fr; }
         .actions { grid-template-columns: 1fr; }
@@ -143,7 +151,12 @@
       <h1 class="hero-title">Послуги поруч</h1>
       <div class="subtitle">Оберіть, хто ви</div>
 
-      <section id="landingCard" class="card" style="margin-bottom:14px; background:var(--bg-soft)">
+      <section id="authSplash" class="card splash" style="margin-bottom:14px; background:var(--bg-soft)">
+        <strong>Перевіряємо профіль...</strong>
+        <div class="small">Завантаження Telegram-акаунта</div>
+      </section>
+
+      <section id="landingCard" class="card hidden" style="margin-bottom:14px; background:var(--bg-soft)">
         <div class="grid">
           <button id="startClientBtn">Я шукаю Майстра</button>
           <button id="startPerformerBtn" class="btn-outline">Я Майстер</button>
@@ -242,12 +255,37 @@
       let serviceCategories = [];
       let appStarted = false;
       let selectedRole = "client";
+      let authState = "loading"; // loading | authed | unauthed
 
       function buildHeaders() {
         const headers = {};
         if (tg?.initData) headers["X-Telegram-Init-Data"] = tg.initData;
         if (tg?.initDataUnsafe?.user) headers["X-Telegram-User"] = JSON.stringify(tg.initDataUnsafe.user);
         return headers;
+      }
+
+      function hasAnyRegistration(user) {
+        return Boolean(user?.is_client_registered) || Boolean(user?.is_performer_registered);
+      }
+
+      function isRoleRegistered(role) {
+        return role === "client"
+          ? Boolean(currentUser?.is_client_registered)
+          : Boolean(currentUser?.is_performer_registered);
+      }
+
+      function currentRoute() {
+        const path = location.pathname;
+        if (path === "/app" || path === "/register") return path;
+        const hashRoute = location.hash.replace("#", "");
+        if (hashRoute === "/app" || hashRoute === "/register") return hashRoute;
+        return "/register";
+      }
+
+      function navigate(route, replace = false) {
+        if (route !== "/app" && route !== "/register") return;
+        if (replace) history.replaceState({}, "", route);
+        else history.pushState({}, "", route);
       }
 
       function formatApiError(detail, fallbackText) {
@@ -319,6 +357,14 @@
       }
 
       function showByRole() {
+        const splash = document.getElementById("authSplash");
+        splash.classList.toggle("hidden", authState !== "loading");
+        if (authState === "loading") {
+          document.getElementById("appContent").classList.add("hidden");
+          document.getElementById("landingCard").classList.add("hidden");
+          return;
+        }
+
         if (!appStarted) {
           document.getElementById("appContent").classList.add("hidden");
           document.getElementById("landingCard").classList.remove("hidden");
@@ -326,9 +372,7 @@
         }
         document.getElementById("appContent").classList.remove("hidden");
         document.getElementById("landingCard").classList.add("hidden");
-        const isRegistered = selectedRole === "client"
-          ? Boolean(currentUser?.is_client_registered)
-          : Boolean(currentUser?.is_performer_registered);
+        const isRegistered = isRoleRegistered(selectedRole);
         document.getElementById("registrationCard").classList.toggle("hidden", isRegistered);
         document.getElementById("quickSection").classList.add("hidden");
         document.getElementById("filtersCard").classList.add("hidden");
@@ -351,12 +395,12 @@
       }
 
       function startRoleFlow(role) {
+        console.info("[auth] startRoleFlow role=", role, "authState=", authState);
         appStarted = true;
         selectedRole = role;
+        navigate(authState === "authed" ? "/app" : "/register");
         showByRole();
-        const isRegistered = role === "client"
-          ? Boolean(currentUser?.is_client_registered)
-          : Boolean(currentUser?.is_performer_registered);
+        const isRegistered = isRoleRegistered(role);
         if (isRegistered) {
           fetchTasks();
         }
@@ -520,20 +564,51 @@
       }
 
       async function fetchMe() {
-        const res = await fetch(`${API_BASE}/api/me`, { headers: buildHeaders() });
+        const headers = buildHeaders();
+        const telegramUser = tg?.initDataUnsafe?.user;
+        console.info("[auth] fetchMe start", {
+          telegramId: telegramUser?.id || null,
+          username: telegramUser?.username || null,
+          hasInitData: Boolean(tg?.initData),
+        });
+        const res = await fetch(`${API_BASE}/api/me`, { headers });
         if (!res.ok) {
-          alert("Не вдалося завантажити профіль");
-          return;
+          console.warn("[auth] fetchMe failed", res.status);
+          return null;
         }
         currentUser = await res.json();
+        console.info("[auth] fetchMe ok", {
+          telegramId: currentUser?.telegram_id,
+          role: currentUser?.role,
+          is_client_registered: currentUser?.is_client_registered,
+          is_performer_registered: currentUser?.is_performer_registered,
+        });
+        return currentUser;
+      }
+
+      async function initAuthGate() {
+        authState = "loading";
         showByRole();
-        if (
-          appStarted &&
-          ((selectedRole === "client" && currentUser?.is_client_registered) ||
-            (selectedRole === "performer" && currentUser?.is_performer_registered))
-        ) {
+        const me = await fetchMe();
+
+        if (me && hasAnyRegistration(me)) {
+          authState = "authed";
+          appStarted = true;
+          selectedRole = me.role === "performer" ? "performer" : "client";
+          if (!isRoleRegistered(selectedRole)) {
+            selectedRole = me.is_client_registered ? "client" : "performer";
+          }
+          if (currentRoute() === "/register") navigate("/app", true);
+          showByRole();
           fetchTasks();
+          return;
         }
+
+        authState = "unauthed";
+        appStarted = false;
+        selectedRole = "client";
+        if (currentRoute() === "/app") navigate("/register", true);
+        showByRole();
       }
 
       async function registerUser() {
@@ -577,7 +652,10 @@
           }
 
           currentUser = await res.json();
+          authState = "authed";
+          appStarted = true;
           registerStatus.textContent = "Реєстрацію завершено";
+          navigate("/app", true);
           showByRole();
           fetchTasks();
         } catch (e) {
@@ -878,7 +956,20 @@
         fetchTasks();
       });
 
-      Promise.all([fetchServiceCategories(), fetchMe()]);
+      window.addEventListener("popstate", () => {
+        if (authState === "authed" && currentRoute() === "/register") {
+          navigate("/app", true);
+          return;
+        }
+        if (authState === "unauthed" && currentRoute() === "/app") {
+          navigate("/register", true);
+        }
+      });
+
+      (async () => {
+        await fetchServiceCategories();
+        await initAuthGate();
+      })();
     </script>
   </body>
 </html>
