@@ -872,34 +872,40 @@
         document.getElementById("diiaVerifyBtn")?.addEventListener("click", async () => {
           const statusNode = document.getElementById("diiaVerifyStatus");
           statusNode.textContent = "Запит до ДІЯ...";
-          const btn = document.getElementById("diiaVerifyBtn");
-          btn.disabled = true;
-          try {
-            const startResp = await fetch(`${API_BASE}/api/verification/diia/start`, {
-              method: "POST",
-              headers: buildHeaders(),
-            });
-            if (!startResp.ok) {
-              const err = await startResp.json();
-              statusNode.textContent = formatApiError(err.detail, "Не вдалося запустити перевірку");
-              btn.disabled = false;
-              return;
-            }
-            const startData = await startResp.json();
-            if (startData?.sessionId) {
-              localStorage.setItem("diiaSessionId", startData.sessionId);
-            }
-            if (startData?.redirectUrl) {
-              statusNode.textContent = "Відкриваємо ДІЯ...";
-              window.location.href = startData.redirectUrl;
-            } else {
-              statusNode.textContent = "Очікуємо підтвердження...";
-            }
-            pollVerificationStatus();
-          } catch (e) {
-            statusNode.textContent = "Помилка мережі";
-            btn.disabled = false;
+          const startResp = await fetch(`${API_BASE}/api/diia/start`, {
+            method: "POST",
+            headers: buildHeaders(),
+          });
+          if (!startResp.ok) {
+            const err = await startResp.json();
+            statusNode.textContent = formatApiError(err.detail, "Не вдалося запустити перевірку");
+            return;
           }
+          const startData = await startResp.json();
+          if (startData?.verify_url) {
+            window.open(startData.verify_url, "_blank");
+          }
+          const diiaFullName = prompt("Введіть ПІБ з ДІЯ для завершення перевірки");
+          if (!diiaFullName) {
+            statusNode.textContent = "Перевірку скасовано";
+            return;
+          }
+          statusNode.textContent = "Підтвердження...";
+          const formData = new FormData();
+          formData.append("full_name", diiaFullName);
+          const completeResp = await fetch(`${API_BASE}/api/diia/complete`, {
+            method: "POST",
+            headers: buildHeaders(),
+            body: formData,
+          });
+          if (!completeResp.ok) {
+            const err = await completeResp.json();
+            statusNode.textContent = formatApiError(err.detail, "Не вдалося завершити перевірку");
+            return;
+          }
+          currentUser = await completeResp.json();
+          statusNode.textContent = "Особистість підтверджено";
+          await openCabinet(true);
         });
       }
 
@@ -1594,49 +1600,6 @@
       });
       document.getElementById("authRetryBtn").addEventListener("click", initAuthGate);
 
-      async function pollVerificationStatus() {
-        const sessionId = localStorage.getItem("diiaSessionId");
-        if (!sessionId) return;
-        const statusNode = document.getElementById("diiaVerifyStatus");
-        const btn = document.getElementById("diiaVerifyBtn");
-        let attempts = 0;
-        const timer = setInterval(async () => {
-          attempts += 1;
-          try {
-            const r = await fetch(`${API_BASE}/api/verification/status?sessionId=${sessionId}`, {
-              headers: buildHeaders(),
-            });
-            if (!r.ok) {
-              clearInterval(timer);
-              statusNode.textContent = "Не вдалося перевірити статус";
-              btn.disabled = false;
-              return;
-            }
-            const data = await r.json();
-            if (data.status === "verified") {
-              clearInterval(timer);
-              localStorage.removeItem("diiaSessionId");
-              statusNode.textContent = "Особистість підтверджено";
-              await openCabinet(true);
-              await fetchMe();
-              showByRole();
-              return;
-            }
-            if (data.status === "failed" || data.status === "expired" || attempts > 30) {
-              clearInterval(timer);
-              statusNode.textContent = "Не вдалося підтвердити. Спробуйте ще раз.";
-              btn.disabled = false;
-              return;
-            }
-            statusNode.textContent = "Перевіряємо в ДІЯ...";
-          } catch (e) {
-            clearInterval(timer);
-            statusNode.textContent = "Помилка перевірки";
-            btn.disabled = false;
-          }
-        }, 2000);
-      }
-
       window.addEventListener("popstate", () => {
         if (authState === "authed" && currentRoute() === "/register") {
           navigate("/app", true);
@@ -1651,7 +1614,6 @@
         await fetchServiceCategories();
         setupCityAutocomplete();
         await initAuthGate();
-        pollVerificationStatus();
       })();
     </script>
   </body>

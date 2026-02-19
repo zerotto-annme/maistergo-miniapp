@@ -20,11 +20,6 @@ class UserOut(UserBase):
     telegram_chat_id: int | None = None
     is_client_registered: bool = False
     is_performer_registered: bool = False
-    is_verified: bool = False
-    verification_status: str = "unverified"
-    verification_provider: str | None = None
-    verified_full_name: str | None = None
-    verified_at: datetime | None = None
     diia_verified: bool = False
     diia_full_name: str | None = None
     diia_verified_at: datetime | None = None
