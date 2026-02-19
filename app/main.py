@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from urllib import request, parse
 from urllib.parse import parse_qsl
@@ -35,6 +36,8 @@ logger.setLevel(logging.INFO)
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DEV_BYPASS_AUTH = os.getenv("DEV_BYPASS_AUTH", "true").lower() == "true"
+DIIA_VERIFY_MODE = os.getenv("DIIA_VERIFY_MODE", "mock").lower()  # mock | live
+DIIA_DEEPLINK_URL = os.getenv("DIIA_DEEPLINK_URL", "https://diia.gov.ua/")
 ALLOWED_SERVICE_CATEGORIES = [
     "Сантехника",
     "Обои",
@@ -92,6 +95,12 @@ def ensure_legacy_columns() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32)"))
         if "performer_categories_json" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN performer_categories_json TEXT DEFAULT '[]'"))
+        if "diia_verified" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN diia_verified INTEGER DEFAULT 0"))
+        if "diia_full_name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN diia_full_name VARCHAR(255)"))
+        if "diia_verified_at" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN diia_verified_at DATETIME"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_id ON users(telegram_id)"))
 
         task_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tasks)"))}
@@ -138,6 +147,9 @@ def user_to_out(user: User) -> UserOut:
         telegram_chat_id=user.telegram_chat_id,
         is_client_registered=bool(user.is_client_registered),
         is_performer_registered=bool(user.is_performer_registered),
+        diia_verified=bool(user.diia_verified),
+        diia_full_name=user.diia_full_name,
+        diia_verified_at=user.diia_verified_at,
         role=user.role,
         performer_categories=user.performer_categories,
         created_at=user.created_at,
@@ -427,6 +439,10 @@ async def save_image(upload: UploadFile) -> str:
     return f"/static/uploads/{filename}"
 
 
+def normalize_full_name(value: str) -> str:
+    return " ".join(value.strip().split())
+
+
 @app.get("/", response_class=HTMLResponse)
 def web_app():
     with open(BASE_DIR / "templates" / "index.html", "r", encoding="utf-8") as f:
@@ -446,6 +462,48 @@ def web_register_path():
 @app.get("/api/service-categories", response_model=list[str])
 def service_categories():
     return ALLOWED_SERVICE_CATEGORIES
+
+
+@app.post("/api/diia/start")
+def start_diia_verification(
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    require_performer(user)
+    return {
+        "mode": DIIA_VERIFY_MODE,
+        "verify_url": DIIA_DEEPLINK_URL,
+        "message": "Підтвердьте особистість у ДІЯ і поверніться в Mini App",
+    }
+
+
+@app.post("/api/diia/complete", response_model=UserOut)
+def complete_diia_verification(
+    full_name: str = Form(...),
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    require_performer(user)
+
+    diia_name = normalize_full_name(full_name)
+    if len(diia_name) < 5:
+        raise HTTPException(status_code=422, detail="Вкажіть ПІБ з ДІЯ")
+
+    user.diia_verified = 1
+    user.diia_full_name = diia_name
+    user.diia_verified_at = datetime.utcnow()
+    if user.full_name != diia_name:
+        user.full_name = diia_name
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user_to_out(user)
 
 
 @app.get("/api/me", response_model=UserOut)

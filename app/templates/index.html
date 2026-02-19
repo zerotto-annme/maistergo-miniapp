@@ -155,6 +155,38 @@
         gap: 8px;
         margin-top: 10px;
       }
+      .verify-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .verify-ok {
+        color: #166534;
+        background: #dcfce7;
+        border: 1px solid #86efac;
+      }
+      .verify-bad {
+        color: #854d0e;
+        background: #fef9c3;
+        border: 1px solid #fde047;
+      }
+      .diia-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: auto;
+        padding: 10px 14px;
+      }
+      .diia-logo {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+      }
       .splash {
         display: flex;
         flex-direction: column;
@@ -735,6 +767,23 @@
         const profileLine = selectedRole === "client"
           ? `Клієнт: ${currentUser?.full_name || "—"}`
           : `Майстер: ${currentUser?.full_name || "—"}`;
+        const verifyBadge = selectedRole === "performer"
+          ? (
+            currentUser?.diia_verified
+              ? `<span class="verify-status verify-ok">✅ Підтверджено</span>`
+              : `<span class="verify-status verify-bad">✖ Не підтверджено</span>`
+          )
+          : "";
+        const verifyBlock = selectedRole === "performer" && !currentUser?.diia_verified
+          ? `
+            <div class="small" style="margin-top:10px">Підтвердіть особистість через ДІЯ</div>
+            <button id="diiaVerifyBtn" class="diia-btn btn-black" style="margin-top:6px">
+              <img class="diia-logo" alt="ДІЯ" src="https://upload.wikimedia.org/wikipedia/commons/8/8f/Diia_logo.svg" />
+              <span>Підтвердити особистість через ДІЯ</span>
+            </button>
+            <div id="diiaVerifyStatus" class="small"></div>
+          `
+          : "";
         const categoriesLine = selectedRole === "performer"
           ? `<div class="small">Послуги: ${(currentUser?.performer_categories || []).join(", ") || "—"}</div>`
           : "";
@@ -767,10 +816,12 @@
               <img id="cabinetProfilePhoto" class="cabinet-photo" src="${currentUser?.profile_photo_url || ""}" alt="Фото профілю" onerror="this.style.visibility='hidden'" />
               <div>
                 <div><strong>${profileLine}</strong></div>
+                ${verifyBadge}
                 <div class="small">Телефон: ${currentUser?.phone || "—"}</div>
                 <div class="small">Місто: ${currentUser?.city || "—"}</div>
                 ${addressLine}
                 ${categoriesLine}
+                ${verifyBlock}
                 <div class="small" style="margin-top:10px">Фото профілю:</div>
                 <div class="row" style="grid-template-columns:1fr auto; margin-top:6px">
                   <input id="cabinetPhotoInput" type="file" accept="image/*" />
@@ -817,6 +868,44 @@
             photoNode.src = currentUser.profile_photo_url || "";
             photoNode.style.visibility = "";
           }
+        });
+        document.getElementById("diiaVerifyBtn")?.addEventListener("click", async () => {
+          const statusNode = document.getElementById("diiaVerifyStatus");
+          statusNode.textContent = "Запит до ДІЯ...";
+          const startResp = await fetch(`${API_BASE}/api/diia/start`, {
+            method: "POST",
+            headers: buildHeaders(),
+          });
+          if (!startResp.ok) {
+            const err = await startResp.json();
+            statusNode.textContent = formatApiError(err.detail, "Не вдалося запустити перевірку");
+            return;
+          }
+          const startData = await startResp.json();
+          if (startData?.verify_url) {
+            window.open(startData.verify_url, "_blank");
+          }
+          const diiaFullName = prompt("Введіть ПІБ з ДІЯ для завершення перевірки");
+          if (!diiaFullName) {
+            statusNode.textContent = "Перевірку скасовано";
+            return;
+          }
+          statusNode.textContent = "Підтвердження...";
+          const formData = new FormData();
+          formData.append("full_name", diiaFullName);
+          const completeResp = await fetch(`${API_BASE}/api/diia/complete`, {
+            method: "POST",
+            headers: buildHeaders(),
+            body: formData,
+          });
+          if (!completeResp.ok) {
+            const err = await completeResp.json();
+            statusNode.textContent = formatApiError(err.detail, "Не вдалося завершити перевірку");
+            return;
+          }
+          currentUser = await completeResp.json();
+          statusNode.textContent = "Особистість підтверджено";
+          await openCabinet(true);
         });
       }
 

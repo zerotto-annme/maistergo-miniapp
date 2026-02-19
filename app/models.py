@@ -25,6 +25,9 @@ class User(Base):
     is_performer_registered: Mapped[int] = mapped_column(Integer, default=0)
     role: Mapped[str | None] = mapped_column(String(32), nullable=True)
     performer_categories_json: Mapped[str] = mapped_column(Text, default="[]")
+    diia_verified: Mapped[int] = mapped_column(Integer, default=0)
+    diia_full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    diia_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="client")
