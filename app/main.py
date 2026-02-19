@@ -75,6 +75,18 @@ def ensure_legacy_columns() -> None:
         user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
         if "full_name" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(255)"))
+        if "telegram_user_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN telegram_user_id BIGINT"))
+        if "telegram_username" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255)"))
+        if "telegram_first_name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN telegram_first_name VARCHAR(255)"))
+        if "telegram_last_name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN telegram_last_name VARCHAR(255)"))
+        if "telegram_photo_url" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN telegram_photo_url TEXT"))
+        if "last_seen_at" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN last_seen_at DATETIME"))
         if "phone" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(64)"))
         if "city" not in user_cols:
@@ -94,6 +106,7 @@ def ensure_legacy_columns() -> None:
         if "performer_categories_json" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN performer_categories_json TEXT DEFAULT '[]'"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_id ON users(telegram_id)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users(telegram_user_id)"))
 
         task_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tasks)"))}
         if "photos_json" not in task_cols:
@@ -127,10 +140,15 @@ def ensure_legacy_columns() -> None:
 def user_to_out(user: User) -> UserOut:
     return UserOut(
         id=user.id,
-        telegram_id=user.telegram_id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
+    telegram_id=user.telegram_id,
+    telegram_user_id=user.telegram_user_id,
+    telegram_username=user.telegram_username,
+    telegram_first_name=user.telegram_first_name,
+    telegram_last_name=user.telegram_last_name,
+    telegram_photo_url=user.telegram_photo_url,
+    username=user.username,
+    first_name=user.first_name,
+    last_name=user.last_name,
         full_name=user.full_name,
         phone=user.phone,
         city=user.city,
@@ -196,98 +214,55 @@ def bid_to_out(db: Session, bid: Bid) -> BidOut:
     )
 
 
-def extract_telegram_user_payload(
-    telegram_user_json: str | None,
-    telegram_init_data: str | None,
-) -> dict | None:
-    if telegram_user_json:
-        try:
-            payload = json.loads(telegram_user_json)
-            if isinstance(payload, dict):
-                return payload
-        except json.JSONDecodeError:
-            pass
-
-    if telegram_init_data:
-        try:
-            pairs = dict(parse_qsl(telegram_init_data, strict_parsing=False))
-            raw_user = pairs.get("user")
-            if raw_user:
-                payload = json.loads(raw_user)
-                if isinstance(payload, dict):
-                    return payload
-        except (ValueError, json.JSONDecodeError):
-            pass
-    return None
-
-
-def get_or_create_user(
+def upsert_user_from_telegram(
     db: Session,
-    telegram_user_json: str | None,
-    telegram_init_data: str | None,
-    x_dev_user_id: str | None,
+    payload: dict,
 ) -> User:
-    telegram_payload = extract_telegram_user_payload(telegram_user_json, telegram_init_data)
-    if telegram_payload:
-        user_payload = telegram_payload
-        telegram_id = int(user_payload.get("id", 0))
-        if telegram_id <= 0:
-            raise HTTPException(status_code=401, detail="Некоректний користувач Telegram")
-    elif DEV_BYPASS_AUTH:
-        telegram_id = int(x_dev_user_id) if x_dev_user_id else 999000
-        user_payload = {
-            "username": f"dev_{telegram_id}",
-            "first_name": "Dev",
-            "last_name": str(telegram_id),
-        }
-    else:
-        raise HTTPException(status_code=401, detail="Відсутній користувач Telegram")
-
-    user = db.query(User).filter(User.telegram_id == telegram_id).first()
+    telegram_id = int(payload.get("id", 0))
+    if telegram_id <= 0:
+        raise HTTPException(status_code=401, detail="Некоректний користувач Telegram")
+    now = datetime.utcnow()
+    user = db.query(User).filter(User.telegram_user_id == telegram_id).first()
     if user:
-        logger.info(
-            "auth_lookup telegram_id=%s found=true client_registered=%s performer_registered=%s role=%s",
-            telegram_id,
-            bool(user.is_client_registered),
-            bool(user.is_performer_registered),
-            user.role,
-        )
-        # Keep Telegram identity data fresh without forcing manual re-registration.
-        user.username = user_payload.get("username") or user.username
-        user.first_name = user_payload.get("first_name") or user.first_name
-        user.last_name = user_payload.get("last_name") or user.last_name
+        user.telegram_username = payload.get("username") or user.telegram_username
+        user.telegram_first_name = payload.get("first_name") or user.telegram_first_name
+        user.telegram_last_name = payload.get("last_name") or user.telegram_last_name
+        user.telegram_photo_url = payload.get("photo_url") or user.telegram_photo_url
+        user.last_seen_at = now
+        # Keep display name up to date
         if not user.full_name:
             composed = " ".join(
-                x for x in [user_payload.get("first_name", ""), user_payload.get("last_name", "")] if x
+                x for x in [payload.get("first_name", ""), payload.get("last_name", "")] if x
             ).strip()
             if composed:
                 user.full_name = composed
-        # Auto-recover legacy registration flags for previously registered users.
-        if not bool(user.is_performer_registered):
-            if user.role == "performer" or bool(user.performer_categories) or bool(user.profile_photo_url):
-                user.is_performer_registered = 1
-        if not bool(user.is_client_registered):
-            if user.role == "client" and bool(user.address):
-                user.is_client_registered = 1
         db.add(user)
         db.commit()
         db.refresh(user)
+        logger.info("auth_upsert telegram_user_id=%s user_id=%s action=updated", telegram_id, user.id)
         return user
 
-    default_full_name = " ".join(
-        x for x in [user_payload.get("first_name", ""), user_payload.get("last_name", "")] if x
-    ).strip()
+    composed = " ".join(
+        x for x in [payload.get("first_name", ""), payload.get("last_name", "")] if x
+    ).strip() or None
     user = User(
+        telegram_user_id=telegram_id,
         telegram_id=telegram_id,
-        username=user_payload.get("username"),
-        first_name=user_payload.get("first_name"),
-        last_name=user_payload.get("last_name"),
-        full_name=default_full_name or None,
+        telegram_username=payload.get("username"),
+        telegram_first_name=payload.get("first_name"),
+        telegram_last_name=payload.get("last_name"),
+        telegram_photo_url=payload.get("photo_url"),
+        username=payload.get("username"),
+        first_name=payload.get("first_name"),
+        last_name=payload.get("last_name"),
+        full_name=composed,
+        role="client",
+        last_seen_at=now,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    logger.info("auth_lookup telegram_id=%s found=false created=true", telegram_id)
+    logger.info("auth_upsert telegram_user_id=%s user_id=%s action=created", telegram_id, user.id)
     return user
 
 
