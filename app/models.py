@@ -61,9 +61,12 @@ class Task(Base):
     description: Mapped[str] = mapped_column(Text)
     category: Mapped[str] = mapped_column(String(100))
     city: Mapped[str] = mapped_column(String(100))
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    urgency: Mapped[str] = mapped_column(String(32), default="not_urgent")
     budget: Mapped[int] = mapped_column(Integer)
     photos_json: Mapped[str] = mapped_column(Text, default="[]")
     status: Mapped[str] = mapped_column(String(32), default="open")
+    selected_offer_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -23,6 +23,7 @@
         font-family: "Trebuchet MS", "Segoe UI", sans-serif;
         color: var(--text);
         background: var(--bg);
+        padding-bottom: 84px;
       }
       .container { max-width: 920px; margin: 0 auto; padding: 20px; }
       .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; }
@@ -31,7 +32,6 @@
         font-weight: 600;
         color: var(--text);
       }
-      .cabinet-btn { width: auto; min-width: 140px; }
       h1 { margin: 0 0 10px; font-size: 28px; }
       .subtitle { color: var(--muted); margin-bottom: 16px; }
       .grid { display: grid; gap: 14px; }
@@ -76,6 +76,33 @@
       .btn-secondary { background: #fff; color: var(--brand-dark); border: 1px solid var(--brand); }
       .small { font-size: 13px; color: var(--muted); margin-top: 8px; }
       .hidden { display: none !important; }
+      .tabbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #fff;
+        border-top: 1px solid var(--border);
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+        z-index: 40;
+      }
+      .tab-btn {
+        min-height: 44px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--brand-dark);
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .tab-btn.active {
+        background: var(--brand);
+        color: #fff;
+        border-color: var(--brand);
+      }
       .photo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
       .photo-grid img { width: 100%; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
       .chip { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #eef3f8; color: #31455a; font-size: 12px; margin-right: 6px; }
@@ -160,7 +187,6 @@
     <div class="container">
       <div class="top-bar">
         <div id="welcomeUser" class="welcome-user hidden"></div>
-        <button id="cabinetBtn" class="cabinet-btn btn-secondary hidden">Мій кабінет</button>
       </div>
       <div class="brand-wrap">
         <img class="brand-logo" src="/static/logo-new.png" alt="МайстерGO" />
@@ -183,15 +209,45 @@
       </section>
 
       <div id="appContent" class="hidden">
-      <section id="quickSection" class="card hidden" style="margin-bottom:14px; background:var(--bg-soft)">
-        <h3>Що потрібно зробити?</h3>
-        <div class="quick-grid">
-          <button id="quickPlumber" class="quick-btn">🔧 Сантехнік</button>
-          <button id="quickElectric" class="quick-btn">⚡ Електрик</button>
-          <button id="quickRepair" class="quick-btn">🏠 Ремонт</button>
-          <button id="quickOther" class="quick-btn btn-outline">🔨 Інше</button>
-        </div>
+      <section id="homeSection" class="hidden">
+        <section id="quickSection" class="card hidden" style="margin-bottom:14px; background:var(--bg-soft)">
+          <h3>Що потрібно зробити?</h3>
+          <div class="quick-grid">
+            <button id="quickPlumber" class="quick-btn">🔧 Сантехнік</button>
+            <button id="quickElectric" class="quick-btn">⚡ Електрик</button>
+            <button id="quickRepair" class="quick-btn">🏠 Ремонт</button>
+            <button id="quickOther" class="quick-btn btn-outline">🔨 Інше</button>
+          </div>
+          <button id="homeCreateCta" style="margin-top:10px">➕ Створити заявку</button>
+        </section>
+
+        <section id="filtersCard" class="card hidden" style="margin-top:14px; margin-bottom:14px">
+          <h3>Нові заявки для вас</h3>
+          <div class="grid">
+            <div class="row">
+              <select id="filterCategory">
+                <option value="">Усі категорії</option>
+              </select>
+              <input id="filterCity" placeholder="Місто/район" />
+            </div>
+            <div class="row">
+              <select id="filterUrgency">
+                <option value="">Будь-яка терміновість</option>
+                <option value="today">Сьогодні</option>
+                <option value="1-3days">1-3 дні</option>
+                <option value="not_urgent">Не терміново</option>
+              </select>
+              <input id="filterMaxBudget" type="number" placeholder="Бюджет до, грн" />
+            </div>
+            <div class="actions">
+              <button id="applyFilters">Застосувати фільтри</button>
+              <button id="resetFilters" class="btn-secondary">Скинути</button>
+            </div>
+          </div>
+        </section>
+        <div id="tasks" class="grid"></div>
       </section>
+
       <section id="registrationCard" class="card hidden">
         <h3>Реєстрація</h3>
         <div class="grid">
@@ -219,51 +275,56 @@
         </div>
       </section>
 
-      <section id="filtersCard" class="card hidden" style="margin-top:14px; margin-bottom:14px">
-        <h3>Пошук і фільтри</h3>
-        <div class="grid">
-          <div class="row">
-            <select id="filterCategory">
-              <option value="">Усі категорії</option>
+      <section id="createSection" class="hidden">
+        <section id="createTaskCard" class="card hidden">
+          <h3>Створити заявку</h3>
+          <div class="grid">
+            <input id="title" placeholder="Наприклад: Полагодити кран" />
+            <textarea id="description" placeholder="Опишіть завдання детальніше"></textarea>
+            <div class="small" style="margin-bottom:2px; font-weight:700">Оберіть категорії робіт</div>
+            <div id="taskCategories" class="checks"></div>
+            <div class="row">
+              <input id="city" placeholder="Місто (Київ)" list="taskCityOptions" autocomplete="off" />
+              <datalist id="taskCityOptions"></datalist>
+            </div>
+            <input id="taskAddress" placeholder="Адреса (вулиця, будинок) — опціонально" />
+            <select id="taskUrgency">
+              <option value="today">Сьогодні</option>
+              <option value="1-3days">1-3 дні</option>
+              <option value="not_urgent" selected>Не терміново</option>
             </select>
-            <input id="filterCity" placeholder="Місто" />
+            <input id="budget" type="number" placeholder="Бюджет до, грн (опціонально)" />
+            <input id="photos" type="file" accept="image/*" multiple />
+            <div class="small">Можна додати до 3 фото.</div>
+            <button id="createTask">Опублікувати</button>
           </div>
-          <div class="row">
-            <input id="filterMinBudget" type="number" placeholder="Бюджет від, грн" />
-            <input id="filterMaxBudget" type="number" placeholder="Бюджет до, грн" />
-          </div>
-          <div class="actions">
-            <button id="applyFilters">Застосувати фільтри</button>
-            <button id="resetFilters" class="btn-secondary">Скинути</button>
-          </div>
-        </div>
+        </section>
+        <section id="createBlockedCard" class="card hidden">
+          <h3>Доступно лише для клієнтів</h3>
+          <div class="small">Щоб створювати заявки, увімкніть роль клієнта.</div>
+          <button id="switchToClientBtn" style="margin-top:8px">Перемкнути роль</button>
+        </section>
       </section>
 
-      <section id="createTaskCard" class="card hidden">
-        <h3>Запропонувати роботу</h3>
-        <div class="grid">
-          <input id="title" placeholder="Наприклад: Полагодити кран" />
-          <textarea id="description" placeholder="Опишіть завдання детальніше"></textarea>
-          <div class="small" style="margin-bottom:2px; font-weight:700">Оберіть категорії робіт</div>
-          <div id="taskCategories" class="checks"></div>
-          <div class="row">
-            <input id="city" placeholder="Місто (Київ)" list="taskCityOptions" autocomplete="off" />
-            <datalist id="taskCityOptions"></datalist>
-          </div>
-          <input id="budget" type="number" placeholder="Бюджет, грн" />
-          <input id="photos" type="file" accept="image/*" multiple />
-          <div class="small">Можна додати до 10 фото.</div>
-          <button id="createTask">Опублікувати</button>
-        </div>
+      <section id="myRequestsSection" class="hidden">
+        <section class="card">
+          <h3 id="myRequestsTitle">Мої заявки</h3>
+          <div id="myRequestsGrid" class="grid"></div>
+        </section>
       </section>
 
-      <section style="margin-top:14px">
+      <section id="profileSection" class="hidden" style="margin-top:14px">
         <div id="cabinetCard" class="card hidden" style="margin-bottom:14px"></div>
         <div id="performerProfileCard" class="card hidden profile-card" style="margin-bottom:14px"></div>
-        <div id="tasks" class="grid"></div>
       </section>
       </div>
     </div>
+    <nav id="tabbar" class="tabbar hidden">
+      <button id="tabHome" class="tab-btn">🏠 Головна</button>
+      <button id="tabCreate" class="tab-btn">➕ Створити</button>
+      <button id="tabMy" class="tab-btn">📋 Мої заявки</button>
+      <button id="tabProfile" class="tab-btn">👤 Кабінет</button>
+    </nav>
 
     <script>
       const tg = window.Telegram?.WebApp;
@@ -277,6 +338,7 @@
       let serviceCategories = [];
       let appStarted = false;
       let selectedRole = "client";
+      let activeTab = "home";
       let authState = "loading"; // loading | authed | unauthed
       let authInitInProgress = false;
       const ukraineCitySeed = [
@@ -474,14 +536,64 @@
         const params = new URLSearchParams();
         const category = document.getElementById("filterCategory").value.trim();
         const city = document.getElementById("filterCity").value.trim();
-        const minBudget = document.getElementById("filterMinBudget").value.trim();
+        const urgency = document.getElementById("filterUrgency").value.trim();
         const maxBudget = document.getElementById("filterMaxBudget").value.trim();
         if (category) params.set("category", category);
         if (city) params.set("city", city);
-        if (minBudget) params.set("min_budget", minBudget);
+        if (urgency) params.set("urgency", urgency);
         if (maxBudget) params.set("max_budget", maxBudget);
         const query = params.toString();
         return query ? `?${query}` : "";
+      }
+
+      function setActiveTab(tab) {
+        activeTab = tab;
+        renderAppSections();
+      }
+
+      function renderAppSections() {
+        const isRegistered = isRoleRegistered(selectedRole);
+        const tabbar = document.getElementById("tabbar");
+        tabbar.classList.toggle("hidden", !appStarted || !isRegistered || authState !== "authed");
+
+        const sections = {
+          home: document.getElementById("homeSection"),
+          create: document.getElementById("createSection"),
+          my: document.getElementById("myRequestsSection"),
+          profile: document.getElementById("profileSection"),
+        };
+        Object.values(sections).forEach((el) => el.classList.add("hidden"));
+        if (sections[activeTab]) sections[activeTab].classList.remove("hidden");
+
+        document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"));
+        const activeBtnMap = {
+          home: "tabHome",
+          create: "tabCreate",
+          my: "tabMy",
+          profile: "tabProfile",
+        };
+        const activeBtnId = activeBtnMap[activeTab];
+        if (activeBtnId) document.getElementById(activeBtnId).classList.add("active");
+
+        document.getElementById("quickSection").classList.toggle("hidden", selectedRole !== "client");
+        document.getElementById("filtersCard").classList.toggle("hidden", selectedRole !== "performer");
+        document.getElementById("createTaskCard").classList.toggle("hidden", selectedRole !== "client");
+        document.getElementById("createBlockedCard").classList.toggle("hidden", selectedRole !== "performer");
+      }
+
+      async function refreshActiveTabData() {
+        if (!isRoleRegistered(selectedRole)) return;
+        if (activeTab === "home") {
+          await fetchHomeTasks();
+          return;
+        }
+        if (activeTab === "my") {
+          await fetchMyRequests();
+          return;
+        }
+        if (activeTab === "profile") {
+          await openCabinet(true);
+        }
       }
 
       function showByRole() {
@@ -493,22 +605,20 @@
         if (authState === "loading") {
           document.getElementById("appContent").classList.add("hidden");
           document.getElementById("landingCard").classList.add("hidden");
+          document.getElementById("tabbar").classList.add("hidden");
           return;
         }
 
         if (!appStarted) {
           document.getElementById("appContent").classList.add("hidden");
           document.getElementById("landingCard").classList.remove("hidden");
+          document.getElementById("tabbar").classList.add("hidden");
           return;
         }
         document.getElementById("appContent").classList.remove("hidden");
         document.getElementById("landingCard").classList.add("hidden");
         const isRegistered = isRoleRegistered(selectedRole);
         document.getElementById("registrationCard").classList.toggle("hidden", isRegistered);
-        document.getElementById("quickSection").classList.add("hidden");
-        document.getElementById("filtersCard").classList.add("hidden");
-        document.getElementById("createTaskCard").classList.toggle("hidden", !isRegistered || selectedRole !== "client");
-        document.getElementById("cabinetBtn").classList.toggle("hidden", !isRegistered);
         if (isRegistered && selectedRole === "client") {
           welcome.textContent = `Ласкаво просимо, ${currentUser?.full_name || "Клієнт"}`;
           welcome.classList.remove("hidden");
@@ -522,6 +632,15 @@
             roleSelect.dispatchEvent(new Event("change"));
           }
           document.getElementById("tasks").innerHTML = "";
+          document.getElementById("myRequestsGrid").innerHTML = "";
+          document.getElementById("tabbar").classList.add("hidden");
+          document.getElementById("homeSection").classList.add("hidden");
+          document.getElementById("createSection").classList.add("hidden");
+          document.getElementById("myRequestsSection").classList.add("hidden");
+          document.getElementById("profileSection").classList.add("hidden");
+        } else {
+          renderAppSections();
+          refreshActiveTabData();
         }
       }
 
@@ -529,16 +648,21 @@
         console.info("[auth] startRoleFlow role=", role, "authState=", authState);
         appStarted = true;
         selectedRole = role;
+        activeTab = "home";
         navigate(authState === "authed" ? "/app" : "/register");
         showByRole();
         const isRegistered = isRoleRegistered(role);
         if (isRegistered) {
-          fetchTasks();
+          fetchHomeTasks();
         }
       }
 
       function translateTaskStatus(status) {
-        return ({ open: "Відкрита", in_progress: "В роботі", completed: "Завершена" })[status] || status;
+        return ({ open: "Очікує", in_progress: "В роботі", completed: "Завершено", canceled: "Скасовано" })[status] || status;
+      }
+
+      function translateUrgency(value) {
+        return ({ today: "Сьогодні", "1-3days": "1-3 дні", not_urgent: "Не терміново" })[value] || value;
       }
 
       function formatDateTime(dtRaw) {
@@ -564,7 +688,7 @@
         `;
       }
 
-      async function openCabinet() {
+      async function openCabinet(tabMode = false) {
         const isRegistered = selectedRole === "client"
           ? Boolean(currentUser?.is_client_registered)
           : Boolean(currentUser?.is_performer_registered);
@@ -611,7 +735,7 @@
         card.innerHTML = `
           <div class="row" style="align-items:center">
             <h3 style="margin:0">Мій кабінет</h3>
-            <button id="closeCabinetBtn" class="btn-secondary">Закрити</button>
+            ${tabMode ? "" : `<button id="closeCabinetBtn" class="btn-secondary">Закрити</button>`}
           </div>
           <div class="card" style="margin-top:10px">
             <div class="cabinet-profile">
@@ -736,7 +860,8 @@
             }
             if (currentRoute() === "/register") navigate("/app", true);
             showByRole();
-            fetchTasks();
+            renderAppSections();
+            fetchHomeTasks();
             return;
           }
 
@@ -811,21 +936,26 @@
           registerStatus.textContent = "Реєстрацію завершено";
           navigate("/app", true);
           showByRole();
-          fetchTasks();
+          renderAppSections();
+          fetchHomeTasks();
         } catch (e) {
           registerStatus.textContent = "Помилка мережі. Перевірте тунель і спробуйте ще раз.";
         }
       }
 
-      async function fetchTasks() {
+      async function fetchHomeTasks() {
         const isRegistered = selectedRole === "client"
           ? Boolean(currentUser?.is_client_registered)
           : Boolean(currentUser?.is_performer_registered);
         if (!isRegistered) return;
-        const query = "";
+        const root = document.getElementById("tasks");
+        if (selectedRole === "client") {
+          root.innerHTML = "";
+          return;
+        }
+        const query = selectedRole === "performer" ? buildTaskFiltersQuery() : "";
         const modeSep = query ? "&" : "?";
         const res = await fetch(`${API_BASE}/api/tasks${query}${modeSep}mode=${selectedRole}`, { headers: buildHeaders() });
-        const root = document.getElementById("tasks");
         if (!res.ok) {
           const err = await res.json();
           root.innerHTML = `<div class="card">${formatApiError(err.detail, "Помилка завантаження")}</div>`;
@@ -837,7 +967,7 @@
         if (!tasks.length) {
           root.innerHTML = selectedRole === "performer"
             ? `<div class="card">Поки немає нових заявок у ваших категоріях.</div>`
-            : `<div class="card">За вашим фільтром завдань поки немає.</div>`;
+            : `<div class="card">Оберіть категорію та створіть першу заявку.</div>`;
           return;
         }
 
@@ -845,27 +975,48 @@
           const photosHtml = (task.photos || []).length
             ? `<div class="photo-grid">${task.photos.map((u) => `<img src="${u}" alt="Фото завдання" />`).join("")}</div>`
             : "";
+          const budgetText = Number(task.budget || 0) > 0 ? `${task.budget} грн` : "За домовленістю";
 
           const card = document.createElement("div");
           card.className = "card";
           card.innerHTML = `
             <div class="task-title">${task.title}</div>
-            <div class="meta">${task.category} • ${task.city} • ${task.budget} грн • Статус: ${task.status}</div>
+            <div class="meta">${task.category} • ${task.city} • ${budgetText} • Статус: ${translateTaskStatus(task.status)}</div>
+            ${task.urgency ? `<div class="small">Терміновість: ${translateUrgency(task.urgency)}</div>` : ""}
+            ${task.address ? `<div class="small">Адреса: ${task.address}</div>` : ""}
             <div>${task.description}</div>
             ${photosHtml}
             ${selectedRole === "performer" ? `
               <div class="bid-form" style="margin-top:10px">
-                <div style="font-weight:700; margin-bottom:6px">Ціна яку пропоную</div>
+                ${Number(task.budget || 0) > 0 ? `<button class="agree-budget-btn" data-task-id="${task.id}" style="margin-bottom:8px">✅ Погоджуюсь з ціною (${task.budget} грн)</button>` : ""}
+                <div style="font-weight:700; margin-bottom:6px">💬 Запропонувати свою ціну</div>
                 <input id="price-${task.id}" type="number" placeholder="Ваша ціна" />
-                <button style="margin-top:8px" data-task-id="${task.id}">Відгукнутися</button>
+                <button style="margin-top:8px" data-task-id="${task.id}">Надіслати пропозицію</button>
                 <div class="small" id="status-${task.id}"></div>
                 <div class="small" id="performer-contact-${task.id}"></div>
               </div>
-            ` : `<div class="small"><span class="chip">Ваше завдання</span>Нижче відображаються відгуки виконавців.</div><div class="small" id="bids-${task.id}">Завантаження відгуків...</div>`}
+            ` : ""}
           `;
 
           if (selectedRole === "performer") {
-            const bidButton = card.querySelector("button");
+            const agreeBtn = card.querySelector(".agree-budget-btn");
+            agreeBtn?.addEventListener("click", async () => {
+              const status = document.getElementById(`status-${task.id}`);
+              const resp = await fetch(`${API_BASE}/api/tasks/${task.id}/bids`, {
+                method: "POST",
+                headers: { ...buildHeaders(), "Content-Type": "application/json" },
+                body: JSON.stringify({ price: Number(task.budget || 0), message: "Погоджуюсь із заявленим бюджетом" }),
+              });
+              if (!resp.ok) {
+                const err = await resp.json();
+                status.textContent = formatApiError(err.detail, "Помилка");
+                return;
+              }
+              status.textContent = "Пропозицію надіслано";
+              await loadPerformerTaskState(task.id, status, card.querySelector(`#performer-contact-${task.id}`));
+            });
+
+            const bidButton = card.querySelector("button[data-task-id]");
             bidButton.addEventListener("click", async () => {
               const price = Number(document.getElementById(`price-${task.id}`).value);
               const status = document.getElementById(`status-${task.id}`);
@@ -873,7 +1024,7 @@
               const resp = await fetch(`${API_BASE}/api/tasks/${task.id}/bids`, {
                 method: "POST",
                 headers: { ...buildHeaders(), "Content-Type": "application/json" },
-                body: JSON.stringify({ price }),
+                body: JSON.stringify({ price, message: "Запропоновано власну ціну" }),
               });
 
               if (resp.ok) {
@@ -885,12 +1036,68 @@
               }
             });
             loadPerformerTaskState(task.id, card.querySelector(`#status-${task.id}`), card.querySelector(`#performer-contact-${task.id}`));
-          } else {
-            loadTaskBids(task.id, card.querySelector(`#bids-${task.id}`));
           }
 
           root.appendChild(card);
         }
+      }
+
+      async function fetchMyRequests() {
+        const root = document.getElementById("myRequestsGrid");
+        root.innerHTML = "<div class='small'>Завантаження...</div>";
+        if (selectedRole === "client") {
+          document.getElementById("myRequestsTitle").textContent = "Мої заявки";
+          const res = await fetch(`${API_BASE}/api/tasks?mode=client`, { headers: buildHeaders() });
+          if (!res.ok) {
+            const err = await res.json();
+            root.innerHTML = `<div class="small">${formatApiError(err.detail, "Помилка завантаження")}</div>`;
+            return;
+          }
+          const tasks = await res.json();
+          if (!tasks.length) {
+            root.innerHTML = "<div class='small'>У вас ще немає заявок</div>";
+            return;
+          }
+          root.innerHTML = "";
+          for (const task of tasks) {
+            const card = document.createElement("div");
+            card.className = "master-card";
+            const budgetText = Number(task.budget || 0) > 0 ? `${task.budget} грн` : "За домовленістю";
+            card.innerHTML = `
+              <div><strong>${task.title}</strong></div>
+              <div class="small">${task.category} • ${task.city} • ${budgetText}</div>
+              <div class="small">Статус: ${translateTaskStatus(task.status)}</div>
+              <div class="small" id="bids-${task.id}">Завантаження пропозицій майстрів...</div>
+            `;
+            root.appendChild(card);
+            loadTaskBids(task.id, card.querySelector(`#bids-${task.id}`));
+          }
+          return;
+        }
+
+        document.getElementById("myRequestsTitle").textContent = "Мої пропозиції / Замовлення";
+        const res = await fetch(`${API_BASE}/api/cabinet/tasks?mode=performer`, { headers: buildHeaders() });
+        if (!res.ok) {
+          const err = await res.json();
+          root.innerHTML = `<div class="small">${formatApiError(err.detail, "Помилка завантаження")}</div>`;
+          return;
+        }
+        const rows = await res.json();
+        if (!rows.length) {
+          root.innerHTML = "<div class='small'>У вас ще немає відгуків</div>";
+          return;
+        }
+        root.innerHTML = rows
+          .map((item) => `
+            <div class="master-card">
+              <div><strong>${item.title}</strong></div>
+              <div class="small">${item.category} • ${item.city}</div>
+              <div class="small">Статус пропозиції: ${translateBidStatus(item.bid_status || "sent")}</div>
+              <div class="small">Статус заявки: ${translateTaskStatus(item.task_status)}</div>
+              ${item.selected_price ? `<div class="small">Ваша ціна: ${item.selected_price} грн</div>` : ""}
+            </div>
+          `)
+          .join("");
       }
 
       async function loadTaskBids(taskId, node) {
@@ -945,7 +1152,7 @@
               alert(formatApiError(err.detail, "Не вдалося погодити"));
               return;
             }
-            fetchTasks();
+            fetchMyRequests();
           });
         });
         node.querySelectorAll(".complete-bid-btn").forEach((btn) => {
@@ -956,7 +1163,7 @@
               alert(formatApiError(err.detail, "Не вдалося завершити"));
               return;
             }
-            fetchTasks();
+            fetchMyRequests();
           });
         });
         node.querySelectorAll(".review-bid-btn").forEach((btn) => {
@@ -974,13 +1181,21 @@
               alert(formatApiError(err.detail, "Не вдалося зберегти відгук"));
               return;
             }
-            fetchTasks();
+            fetchMyRequests();
           });
         });
       }
 
       function translateBidStatus(status) {
-        return ({ pending: "Очікує рішення клієнта", accepted: "Узгоджено", completed: "Завершено", rejected: "Відхилено" })[status] || status;
+        return ({
+          pending: "Відправлено",
+          sent: "Відправлено",
+          accepted: "Прийнято",
+          accepted_by_client: "Прийнято",
+          completed: "Завершено",
+          rejected: "Відхилено",
+          withdrawn: "Відкликано",
+        })[status] || status;
       }
 
       async function openPerformerProfile(performerId) {
@@ -1037,17 +1252,20 @@
           alert("Оберіть хоча б одну категорію робіт");
           return;
         }
-        if (files.length > 10) {
-          alert("Можна додати максимум 10 фото");
+        if (files.length > 3) {
+          alert("Можна додати максимум 3 фото");
           return;
         }
+        const budgetRaw = document.getElementById("budget").value.trim();
         for (const category of selectedTaskCategories) {
           const formData = new FormData();
           formData.append("title", document.getElementById("title").value);
           formData.append("description", document.getElementById("description").value);
           formData.append("category", category);
           formData.append("city", document.getElementById("city").value);
-          formData.append("budget", document.getElementById("budget").value);
+          formData.append("address", document.getElementById("taskAddress").value);
+          formData.append("urgency", document.getElementById("taskUrgency").value);
+          formData.append("budget", budgetRaw || "0");
           files.forEach((f) => formData.append("photos", f));
 
           const res = await fetch(`${API_BASE}/api/tasks`, {
@@ -1066,10 +1284,13 @@
         document.getElementById("title").value = "";
         document.getElementById("description").value = "";
         document.getElementById("city").value = "";
+        document.getElementById("taskAddress").value = "";
+        document.getElementById("taskUrgency").value = "not_urgent";
         document.getElementById("budget").value = "";
         document.getElementById("photos").value = "";
         document.querySelectorAll("input[name='task-category']").forEach((el) => { el.checked = false; });
-        fetchTasks();
+        setActiveTab("my");
+        fetchMyRequests();
       }
 
       document.getElementById("roleSelect").addEventListener("change", (e) => {
@@ -1082,32 +1303,61 @@
       document.getElementById("roleSelect").dispatchEvent(new Event("change"));
       document.getElementById("startClientBtn").addEventListener("click", () => startRoleFlow("client"));
       document.getElementById("startPerformerBtn").addEventListener("click", () => startRoleFlow("performer"));
-      document.getElementById("cabinetBtn").addEventListener("click", openCabinet);
       document.getElementById("registerBtn").addEventListener("click", registerUser);
       document.getElementById("createTask").addEventListener("click", createTask);
-      document.getElementById("applyFilters").addEventListener("click", fetchTasks);
+      document.getElementById("applyFilters").addEventListener("click", fetchHomeTasks);
       document.getElementById("resetFilters").addEventListener("click", () => {
         document.getElementById("filterCategory").value = "";
         document.getElementById("filterCity").value = "";
-        document.getElementById("filterMinBudget").value = "";
+        document.getElementById("filterUrgency").value = "";
         document.getElementById("filterMaxBudget").value = "";
-        fetchTasks();
+        fetchHomeTasks();
+      });
+      document.getElementById("homeCreateCta").addEventListener("click", () => {
+        setActiveTab("create");
+      });
+      document.getElementById("switchToClientBtn").addEventListener("click", () => {
+        selectedRole = "client";
+        activeTab = "home";
+        showByRole();
+        fetchHomeTasks();
       });
       document.getElementById("quickPlumber").addEventListener("click", () => {
-        document.getElementById("filterCategory").value = "Сантехника";
-        fetchTasks();
+        setActiveTab("create");
+        document.querySelectorAll("input[name='task-category']").forEach((el) => {
+          el.checked = el.value === "Сантехника";
+        });
       });
       document.getElementById("quickElectric").addEventListener("click", () => {
-        document.getElementById("filterCategory").value = "Электрика";
-        fetchTasks();
+        setActiveTab("create");
+        document.querySelectorAll("input[name='task-category']").forEach((el) => {
+          el.checked = el.value === "Электрика";
+        });
       });
       document.getElementById("quickRepair").addEventListener("click", () => {
-        document.getElementById("filterCategory").value = "Малярные работы";
-        fetchTasks();
+        setActiveTab("create");
+        document.querySelectorAll("input[name='task-category']").forEach((el) => {
+          el.checked = el.value === "Малярные работы";
+        });
       });
       document.getElementById("quickOther").addEventListener("click", () => {
-        document.getElementById("filterCategory").value = "";
-        fetchTasks();
+        setActiveTab("create");
+        document.querySelectorAll("input[name='task-category']").forEach((el) => {
+          el.checked = el.value === "Інше";
+        });
+      });
+      document.getElementById("tabHome").addEventListener("click", () => {
+        setActiveTab("home");
+        fetchHomeTasks();
+      });
+      document.getElementById("tabCreate").addEventListener("click", () => setActiveTab("create"));
+      document.getElementById("tabMy").addEventListener("click", () => {
+        setActiveTab("my");
+        fetchMyRequests();
+      });
+      document.getElementById("tabProfile").addEventListener("click", () => {
+        setActiveTab("profile");
+        openCabinet(true);
       });
       document.getElementById("authRetryBtn").addEventListener("click", initAuthGate);
 

@@ -97,6 +97,12 @@ def ensure_legacy_columns() -> None:
         task_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tasks)"))}
         if "photos_json" not in task_cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN photos_json TEXT DEFAULT '[]'"))
+        if "address" not in task_cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN address VARCHAR(255)"))
+        if "urgency" not in task_cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN urgency VARCHAR(32) DEFAULT 'not_urgent'"))
+        if "selected_offer_id" not in task_cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN selected_offer_id INTEGER"))
 
         bid_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(bids)"))}
         if "status" not in bid_cols:
@@ -145,9 +151,12 @@ def task_to_out(task: Task) -> TaskOut:
         description=task.description,
         category=task.category,
         city=task.city,
+        address=task.address,
+        urgency=task.urgency,
         budget=task.budget,
         photos=task.photos,
         status=task.status,
+        selected_offer_id=task.selected_offer_id,
         client_id=task.client_id,
         created_at=task.created_at,
     )
@@ -322,14 +331,9 @@ def resolve_mode(user: User, mode: str | None) -> str:
     return "client"
 
 
-def notify_performer_about_task(chat_id: int, task: Task) -> None:
+def send_telegram_message(chat_id: int, text_msg: str) -> None:
     if not BOT_TOKEN:
         return
-    text_msg = (
-        f"Нова заявка у вашій категорії:\\n"
-        f"{task.title}\\n"
-        f"{task.category} • {task.city} • {task.budget} грн"
-    )
     payload = parse.urlencode({"chat_id": str(chat_id), "text": text_msg}).encode()
     try:
         request.urlopen(
@@ -338,23 +342,49 @@ def notify_performer_about_task(chat_id: int, task: Task) -> None:
             timeout=5,
         ).read()
     except Exception:
-        # Non-blocking best-effort notification.
         return
+
+
+def notify_performer_about_task(chat_id: int, task: Task) -> None:
+    budget_txt = f"{task.budget} грн" if task.budget > 0 else "за домовленістю"
+    text_msg = (
+        "Нова заявка у вашій категорії:\n"
+        f"{task.title}\n"
+        f"{task.category} • {task.city} • {budget_txt}"
+    )
+    send_telegram_message(chat_id, text_msg)
 
 
 def notify_client_about_new_bid(chat_id: int, task: Task) -> None:
-    if not BOT_TOKEN:
-        return
     text_msg = "Є новий відгук на вашу заявку, перевірте будь ласка!"
-    payload = parse.urlencode({"chat_id": str(chat_id), "text": text_msg}).encode()
-    try:
-        request.urlopen(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            data=payload,
-            timeout=5,
-        ).read()
-    except Exception:
-        return
+    send_telegram_message(chat_id, text_msg)
+
+
+def notify_about_selection(client: User | None, performer: User | None, task: Task, bid: Bid) -> None:
+    if client and client.telegram_chat_id:
+        send_telegram_message(
+            int(client.telegram_chat_id),
+            (
+                "Ви обрали майстра. Контакти відкрито.\n"
+                f"Майстер: {performer.full_name if performer else '—'}\n"
+                f"Телефон: {performer.phone if performer else '—'}\n"
+                f"Заявка: {task.title}"
+            ),
+        )
+
+    if performer and performer.telegram_chat_id and client:
+        send_telegram_message(
+            int(performer.telegram_chat_id),
+            (
+                "Клієнт обрав вас. Контакти відкрито.\n"
+                f"Клієнт: {client.full_name or '—'}\n"
+                f"Телефон: {client.phone or '—'}\n"
+                f"Місто: {client.city or '—'}\n"
+                f"Адреса: {client.address or '—'}\n"
+                f"Заявка: {task.title}\n"
+                f"Ціна: {bid.price} грн"
+            ),
+        )
 
 
 def normalize_categories(values: list[str]) -> list[str]:
@@ -527,6 +557,7 @@ async def register(
 def list_tasks(
     city: str | None = None,
     category: str | None = None,
+    urgency: str | None = None,
     min_budget: int | None = None,
     max_budget: int | None = None,
     mode: str | None = None,
@@ -548,6 +579,8 @@ def list_tasks(
     if category:
         normalized = normalize_categories([category])
         query = query.filter(Task.category == normalized[0])
+    if urgency:
+        query = query.filter(Task.urgency == urgency)
     if min_budget is not None:
         query = query.filter(Task.budget >= min_budget)
     if max_budget is not None:
@@ -558,17 +591,12 @@ def list_tasks(
         return [task_to_out(t) for t in tasks if t.client_id == user.id]
 
     categories = set(user.performer_categories)
-    my_bids = db.query(Bid).filter(Bid.performer_id == user.id).all()
-    my_task_status = {b.task_id: b.status for b in my_bids}
-
     result: list[TaskOut] = []
     for task in tasks:
         if task.client_id == user.id:
             continue
-        my_status = my_task_status.get(task.id)
         is_matching_open = task.status == "open" and task.category in categories
-        is_my_active = my_status in {"accepted", "completed"}
-        if is_matching_open or is_my_active:
+        if is_matching_open:
             result.append(task_to_out(task))
     return result
 
@@ -657,7 +685,9 @@ async def create_task(
     description: str = Form(...),
     category: str = Form(...),
     city: str = Form(...),
-    budget: int = Form(...),
+    address: str = Form(default=""),
+    urgency: str = Form(default="not_urgent"),
+    budget: int = Form(default=0),
     photos: list[UploadFile] = File(default=[]),
     x_telegram_init_data: str | None = Header(default=None),
     x_telegram_user: str | None = Header(default=None),
@@ -667,12 +697,14 @@ async def create_task(
     user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
     require_client(user)
 
-    if len(photos) > 10:
-        raise HTTPException(status_code=422, detail="Можна додати не більше 10 фото")
+    if len(photos) > 3:
+        raise HTTPException(status_code=422, detail="Можна додати не більше 3 фото")
 
     title_clean = title.strip()
     desc_clean = description.strip()
     city_clean = city.strip()
+    address_clean = address.strip()
+    urgency_clean = urgency.strip() or "not_urgent"
     category_clean = normalize_categories([category])[0]
 
     if len(title_clean) < 3:
@@ -681,8 +713,10 @@ async def create_task(
         raise HTTPException(status_code=422, detail="Опис повинен містити щонайменше 5 символів")
     if len(city_clean) < 2:
         raise HTTPException(status_code=422, detail="Вкажіть місто")
-    if budget <= 0:
-        raise HTTPException(status_code=422, detail="Бюджет має бути більше нуля")
+    if budget < 0:
+        raise HTTPException(status_code=422, detail="Бюджет не може бути від'ємним")
+    if urgency_clean not in {"today", "1-3days", "not_urgent"}:
+        raise HTTPException(status_code=422, detail="Некоректна терміновість")
 
     photo_urls: list[str] = []
     for photo in photos:
@@ -693,6 +727,8 @@ async def create_task(
         description=desc_clean,
         category=category_clean,
         city=city_clean,
+        address=address_clean or None,
+        urgency=urgency_clean,
         budget=budget,
         client_id=user.id,
         status="open",
@@ -703,7 +739,8 @@ async def create_task(
     db.refresh(task)
 
     # Notify matching performers in Telegram if they linked chat via /start.
-    performers = db.query(User).all()
+    performers = db.query(User).order_by(User.created_at.desc()).all()
+    notified_count = 0
     for performer in performers:
         if (
             bool(performer.is_performer_registered)
@@ -712,6 +749,9 @@ async def create_task(
             and performer.id != user.id
         ):
             notify_performer_about_task(int(performer.telegram_chat_id), task)
+            notified_count += 1
+            if notified_count >= 10:
+                break
 
     return task_to_out(task)
 
@@ -820,9 +860,13 @@ def accept_bid(
         one.status = "accepted" if one.id == bid.id else "rejected"
         db.add(one)
     task.status = "in_progress"
+    task.selected_offer_id = bid.id
     db.add(task)
     db.commit()
     db.refresh(bid)
+    performer = db.query(User).filter(User.id == bid.performer_id).first()
+    client = db.query(User).filter(User.id == task.client_id).first()
+    notify_about_selection(client, performer, task, bid)
     return bid_to_out(db, bid)
 
 

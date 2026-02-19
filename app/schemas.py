@@ -33,9 +33,12 @@ class TaskOut(BaseModel):
     description: str
     category: str
     city: str
+    address: str | None = None
+    urgency: str | None = None
     budget: int
     photos: list[str] = Field(default_factory=list)
     status: str
+    selected_offer_id: int | None = None
     client_id: int
     created_at: datetime
 
