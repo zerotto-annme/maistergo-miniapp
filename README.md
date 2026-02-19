@@ -50,6 +50,7 @@ python3 app/bot.py
 
 У production:
 - постав `DEV_BYPASS_AUTH=false`
+- задай `DATABASE_URL` на PostgreSQL (щоб акаунти не втрачались після рестарту)
 - передавай заголовки `X-Telegram-Init-Data` і `X-Telegram-User`
 - backend валідує підпис initData
 
