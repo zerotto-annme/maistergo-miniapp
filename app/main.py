@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib import request, parse
 from urllib.parse import parse_qsl
@@ -38,6 +38,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DEV_BYPASS_AUTH = os.getenv("DEV_BYPASS_AUTH", "true").lower() == "true"
 DIIA_VERIFY_MODE = os.getenv("DIIA_VERIFY_MODE", "mock").lower()  # mock | live
 DIIA_DEEPLINK_URL = os.getenv("DIIA_DEEPLINK_URL", "https://diia.gov.ua/")
+DIIA_WEBHOOK_SECRET = os.getenv("DIIA_WEBHOOK_SECRET", "dev-secret")
 ALLOWED_SERVICE_CATEGORIES = [
     "Сантехника",
     "Обои",
@@ -101,6 +102,16 @@ def ensure_legacy_columns() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN diia_full_name VARCHAR(255)"))
         if "diia_verified_at" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN diia_verified_at DATETIME"))
+        if "is_verified" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0"))
+        if "verification_status" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN verification_status VARCHAR(32) DEFAULT 'unverified'"))
+        if "verification_provider" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN verification_provider VARCHAR(64)"))
+        if "verified_full_name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN verified_full_name VARCHAR(255)"))
+        if "verified_at" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN verified_at DATETIME"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_id ON users(telegram_id)"))
 
         task_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tasks)"))}
@@ -112,6 +123,28 @@ def ensure_legacy_columns() -> None:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN urgency VARCHAR(32) DEFAULT 'not_urgent'"))
         if "selected_offer_id" not in task_cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN selected_offer_id INTEGER"))
+
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS verification_sessions (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    provider VARCHAR(32) NOT NULL DEFAULT 'diia',
+                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                    state VARCHAR(128) UNIQUE NOT NULL,
+                    nonce VARCHAR(128) UNIQUE NOT NULL,
+                    redirect_url TEXT NOT NULL,
+                    provider_session_id VARCHAR(255),
+                    payload_raw TEXT,
+                    error_code VARCHAR(128),
+                    expires_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
 
         bid_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(bids)"))}
         if "status" not in bid_cols:
@@ -147,6 +180,11 @@ def user_to_out(user: User) -> UserOut:
         telegram_chat_id=user.telegram_chat_id,
         is_client_registered=bool(user.is_client_registered),
         is_performer_registered=bool(user.is_performer_registered),
+        is_verified=bool(user.is_verified),
+        verification_status=user.verification_status,
+        verification_provider=user.verification_provider,
+        verified_full_name=user.verified_full_name,
+        verified_at=user.verified_at,
         diia_verified=bool(user.diia_verified),
         diia_full_name=user.diia_full_name,
         diia_verified_at=user.diia_verified_at,
@@ -443,6 +481,10 @@ def normalize_full_name(value: str) -> str:
     return " ".join(value.strip().split())
 
 
+def generate_token() -> str:
+    return uuid4().hex
+
+
 @app.get("/", response_class=HTMLResponse)
 def web_app():
     with open(BASE_DIR / "templates" / "index.html", "r", encoding="utf-8") as f:
@@ -522,6 +564,149 @@ def get_me(
         user.role,
     )
     return user_to_out(user)
+
+
+@app.post("/api/verification/diia/start")
+def start_diia(
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    require_performer(user)
+    if bool(user.is_verified) or user.verification_status == "verified":
+        raise HTTPException(status_code=409, detail="already verified")
+
+    session_id = uuid4().hex
+    state = generate_token()
+    nonce = generate_token()
+    redirect_url = f"{DIIA_DEEPLINK_URL}?state={state}&nonce={nonce}"
+
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+    session = VerificationSession(
+        id=session_id,
+        user_id=user.id,
+        provider="diia",
+        status="pending",
+        state=state,
+        nonce=nonce,
+        redirect_url=redirect_url,
+        expires_at=expires_at,
+    )
+    db.add(session)
+    user.verification_status = "pending"
+    user.verification_provider = "diia"
+    user.is_verified = 0
+    db.add(user)
+    db.commit()
+
+    if user.telegram_chat_id:
+        send_telegram_message(int(user.telegram_chat_id), "Розпочато підтвердження через Дію…")
+
+    return {"sessionId": session_id, "status": "pending", "redirectUrl": redirect_url}
+
+
+@app.get("/api/verification/status")
+def verification_status(
+    sessionId: str,
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    session = db.query(VerificationSession).filter(VerificationSession.id == sessionId).first()
+    if not session or session.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "status": session.status,
+        "verifiedFullName": user.verified_full_name if session.status == "verified" else None,
+    }
+
+
+@app.post("/api/verification/diia/webhook")
+async def diia_webhook(
+    payload: dict,
+    x_signature: str | None = Header(default=None, alias="X-DIIA-Signature"),
+    db: Session = Depends(get_db),
+):
+    if not DIIA_WEBHOOK_SECRET or x_signature != DIIA_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    provider_session_id = payload.get("provider_session_id")
+    state = payload.get("state")
+    full_name = payload.get("full_name")
+    if not full_name:
+        raise HTTPException(status_code=422, detail="full_name is required")
+
+    session = None
+    if provider_session_id:
+        session = (
+            db.query(VerificationSession)
+            .filter(VerificationSession.provider_session_id == provider_session_id)
+            .first()
+        )
+    if session is None and state:
+        session = db.query(VerificationSession).filter(VerificationSession.state == state).first()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    user = db.query(User).filter(User.id == session.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    session.status = "verified"
+    session.payload_raw = json.dumps(payload, ensure_ascii=False)
+    session.provider_session_id = provider_session_id or session.provider_session_id
+    user.is_verified = 1
+    user.verification_status = "verified"
+    user.verification_provider = "diia"
+    user.verified_full_name = full_name
+    user.verified_at = datetime.utcnow()
+    user.full_name = full_name
+    db.add(session)
+    db.add(user)
+    db.commit()
+
+    if user.telegram_chat_id:
+        send_telegram_message(int(user.telegram_chat_id), "✅ Особу підтверджено")
+
+    return {"ok": True}
+
+
+@app.post("/api/verification/diia/webhook-dev")
+def diia_webhook_dev(
+    sessionId: str = Form(...),
+    full_name: str = Form(...),
+    secret: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    if os.getenv("ENV", "development") != "development":
+        raise HTTPException(status_code=403, detail="Not allowed")
+    if secret != DIIA_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid secret")
+
+    session = db.query(VerificationSession).filter(VerificationSession.id == sessionId).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    user = db.query(User).filter(User.id == session.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    session.status = "verified"
+    session.payload_raw = json.dumps({"full_name": full_name, "dev": True}, ensure_ascii=False)
+    user.is_verified = 1
+    user.verification_status = "verified"
+    user.verification_provider = "diia"
+    user.verified_full_name = full_name
+    user.verified_at = datetime.utcnow()
+    user.full_name = full_name
+    db.add(session)
+    db.add(user)
+    db.commit()
+
+    return {"ok": True}
 
 
 @app.post("/api/me/photo", response_model=UserOut)
