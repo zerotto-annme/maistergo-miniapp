@@ -377,13 +377,21 @@
       }
 
       function hasAnyRegistration(user) {
-        return Boolean(user?.is_client_registered) || Boolean(user?.is_performer_registered);
+        if (Boolean(user?.is_client_registered) || Boolean(user?.is_performer_registered)) return true;
+        const inferredClient = Boolean(user?.address && user?.phone && user?.city);
+        const inferredPerformer = Boolean(
+          (user?.performer_categories || []).length || user?.profile_photo_url
+        );
+        return inferredClient || inferredPerformer;
       }
 
       function isRoleRegistered(role) {
-        return role === "client"
-          ? Boolean(currentUser?.is_client_registered)
-          : Boolean(currentUser?.is_performer_registered);
+        if (role === "client") {
+          return Boolean(currentUser?.is_client_registered)
+            || Boolean(currentUser?.address && currentUser?.phone && currentUser?.city);
+        }
+        return Boolean(currentUser?.is_performer_registered)
+          || Boolean((currentUser?.performer_categories || []).length || currentUser?.profile_photo_url);
       }
 
       function currentRoute() {

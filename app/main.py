@@ -261,6 +261,13 @@ def get_or_create_user(
             ).strip()
             if composed:
                 user.full_name = composed
+        # Auto-recover legacy registration flags for previously registered users.
+        if not bool(user.is_performer_registered):
+            if user.role == "performer" or bool(user.performer_categories) or bool(user.profile_photo_url):
+                user.is_performer_registered = 1
+        if not bool(user.is_client_registered):
+            if user.role == "client" and bool(user.address):
+                user.is_client_registered = 1
         db.add(user)
         db.commit()
         db.refresh(user)
