@@ -20,9 +20,6 @@ class UserOut(UserBase):
     telegram_chat_id: int | None = None
     is_client_registered: bool = False
     is_performer_registered: bool = False
-    diia_verified: bool = False
-    diia_full_name: str | None = None
-    diia_verified_at: datetime | None = None
     role: str | None = None
     performer_categories: list[str] = Field(default_factory=list)
     created_at: datetime
