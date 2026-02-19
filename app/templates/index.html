@@ -713,8 +713,8 @@
         }
         const items = await resp.json();
         const activeItems = items.filter((it) => {
-          if (selectedRole === "client") return it.task_status !== "completed";
-          return ["pending", "accepted"].includes(it.bid_status || "pending") && it.task_status !== "completed";
+          if (selectedRole === "client") return ["open", "in_progress"].includes(it.task_status);
+          return ["pending", "accepted", "sent"].includes(it.bid_status || "pending") && it.task_status !== "completed";
         });
         const completedItems = items.filter((it) => {
           if (selectedRole === "client") return it.task_status === "completed";
@@ -731,6 +731,21 @@
         const addressLine = selectedRole === "client"
           ? `<div class="small">Адреса: ${currentUser?.address || "—"}</div>`
           : "";
+
+        const listsHtml = selectedRole === "client" ? "" : `
+          <div style="margin-top:12px"><strong>Активні</strong></div>
+          <div class="grid" style="margin-top:6px">
+            ${activeItems.length ? activeItems.map(renderCabinetTaskCard).join("") : `<div class="small">Поки немає активних записів</div>`}
+          </div>
+          <div style="margin-top:12px"><strong>Завершені</strong></div>
+          <div class="grid" style="margin-top:6px">
+            ${completedItems.length ? completedItems.map(renderCabinetTaskCard).join("") : `<div class="small">Поки немає завершених записів</div>`}
+          </div>
+          <div style="margin-top:12px"><strong>Архів</strong></div>
+          <div class="grid" style="margin-top:6px">
+            ${archiveItems.length ? archiveItems.map(renderCabinetTaskCard).join("") : `<div class="small">Архів порожній</div>`}
+          </div>
+        `;
 
         card.innerHTML = `
           <div class="row" style="align-items:center">
@@ -756,22 +771,10 @@
             </div>
             <div class="cabinet-tabs">
               <span class="chip">Профіль</span>
-              <span class="chip">Активні</span>
-              <span class="chip">Історія</span>
+              ${selectedRole === "performer" ? `<span class="chip">Активні</span><span class="chip">Історія</span>` : ""}
             </div>
           </div>
-          <div style="margin-top:12px"><strong>Активні</strong></div>
-          <div class="grid" style="margin-top:6px">
-            ${activeItems.length ? activeItems.map(renderCabinetTaskCard).join("") : `<div class="small">Поки немає активних записів</div>`}
-          </div>
-          <div style="margin-top:12px"><strong>Завершені</strong></div>
-          <div class="grid" style="margin-top:6px">
-            ${completedItems.length ? completedItems.map(renderCabinetTaskCard).join("") : `<div class="small">Поки немає завершених записів</div>`}
-          </div>
-          <div style="margin-top:12px"><strong>Архів</strong></div>
-          <div class="grid" style="margin-top:6px">
-            ${archiveItems.length ? archiveItems.map(renderCabinetTaskCard).join("") : `<div class="small">Архів порожній</div>`}
-          </div>
+          ${listsHtml}
         `;
         document.getElementById("closeCabinetBtn")?.addEventListener("click", () => {
           card.classList.add("hidden");
@@ -1058,20 +1061,43 @@
             root.innerHTML = "<div class='small'>У вас ще немає заявок</div>";
             return;
           }
-          root.innerHTML = "";
-          for (const task of tasks) {
-            const card = document.createElement("div");
-            card.className = "master-card";
-            const budgetText = Number(task.budget || 0) > 0 ? `${task.budget} грн` : "За домовленістю";
-            card.innerHTML = `
-              <div><strong>${task.title}</strong></div>
-              <div class="small">${task.category} • ${task.city} • ${budgetText}</div>
-              <div class="small">Статус: ${translateTaskStatus(task.status)}</div>
-              <div class="small" id="bids-${task.id}">Завантаження пропозицій майстрів...</div>
-            `;
-            root.appendChild(card);
-            loadTaskBids(task.id, card.querySelector(`#bids-${task.id}`));
-          }
+          const activeTasks = tasks.filter((t) => ["open", "in_progress"].includes(t.status));
+          const completedTasks = tasks.filter((t) => t.status === "completed");
+          const archiveTasks = tasks.filter((t) => !activeTasks.includes(t) && !completedTasks.includes(t));
+
+          root.innerHTML = `
+            <div><strong>Активні</strong></div>
+            <div id="myClientActive" class="grid"></div>
+            <div><strong>Завершені</strong></div>
+            <div id="myClientCompleted" class="grid"></div>
+            <div><strong>Архів</strong></div>
+            <div id="myClientArchive" class="grid"></div>
+          `;
+
+          const renderTaskTo = (containerId, taskList, emptyText) => {
+            const container = document.getElementById(containerId);
+            if (!taskList.length) {
+              container.innerHTML = `<div class='small'>${emptyText}</div>`;
+              return;
+            }
+            for (const task of taskList) {
+              const card = document.createElement("div");
+              card.className = "master-card";
+              const budgetText = Number(task.budget || 0) > 0 ? `${task.budget} грн` : "За домовленістю";
+              card.innerHTML = `
+                <div><strong>${task.title}</strong></div>
+                <div class="small">${task.category} • ${task.city} • ${budgetText}</div>
+                <div class="small">Статус: ${translateTaskStatus(task.status)}</div>
+                <div class="small" id="bids-${task.id}">Завантаження пропозицій майстрів...</div>
+              `;
+              container.appendChild(card);
+              loadTaskBids(task.id, card.querySelector(`#bids-${task.id}`));
+            }
+          };
+
+          renderTaskTo("myClientActive", activeTasks, "Немає активних заявок");
+          renderTaskTo("myClientCompleted", completedTasks, "Немає завершених заявок");
+          renderTaskTo("myClientArchive", archiveTasks, "Архів порожній");
           return;
         }
 
@@ -1087,17 +1113,32 @@
           root.innerHTML = "<div class='small'>У вас ще немає відгуків</div>";
           return;
         }
-        root.innerHTML = rows
-          .map((item) => `
-            <div class="master-card">
-              <div><strong>${item.title}</strong></div>
-              <div class="small">${item.category} • ${item.city}</div>
-              <div class="small">Статус пропозиції: ${translateBidStatus(item.bid_status || "sent")}</div>
-              <div class="small">Статус заявки: ${translateTaskStatus(item.task_status)}</div>
-              ${item.selected_price ? `<div class="small">Ваша ціна: ${item.selected_price} грн</div>` : ""}
-            </div>
-          `)
-          .join("");
+        const activeRows = rows.filter((r) => ["pending", "accepted", "sent"].includes(r.bid_status || "pending") && r.task_status !== "completed");
+        const completedRows = rows.filter((r) => (r.bid_status === "completed" || r.task_status === "completed"));
+        const archiveRows = rows.filter((r) => !activeRows.includes(r) && !completedRows.includes(r));
+
+        const renderRows = (list, emptyText) => (
+          list.length
+            ? list.map((item) => `
+              <div class="master-card">
+                <div><strong>${item.title}</strong></div>
+                <div class="small">${item.category} • ${item.city}</div>
+                <div class="small">Статус пропозиції: ${translateBidStatus(item.bid_status || "sent")}</div>
+                <div class="small">Статус заявки: ${translateTaskStatus(item.task_status)}</div>
+                ${item.selected_price ? `<div class="small">Ваша ціна: ${item.selected_price} грн</div>` : ""}
+              </div>
+            `).join("")
+            : `<div class='small'>${emptyText}</div>`
+        );
+
+        root.innerHTML = `
+          <div><strong>Активні</strong></div>
+          <div class="grid">${renderRows(activeRows, "Немає активних пропозицій")}</div>
+          <div><strong>Завершені</strong></div>
+          <div class="grid">${renderRows(completedRows, "Немає завершених")}</div>
+          <div><strong>Архів</strong></div>
+          <div class="grid">${renderRows(archiveRows, "Архів порожній")}</div>
+        `;
       }
 
       async function loadTaskBids(taskId, node) {
