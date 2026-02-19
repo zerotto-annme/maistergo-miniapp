@@ -199,9 +199,12 @@
             <option value="client">Я шукаю послугу</option>
             <option value="performer">Я виконавець послуг</option>
           </select>
-          <input id="fullName" placeholder="Ім'я" />
+          <input id="firstName" placeholder="Ім'я" />
+          <input id="lastName" placeholder="Прізвище" />
+          <input id="middleName" placeholder="По батькові" />
           <input id="phone" placeholder="Номер телефону" />
-          <input id="profileCity" placeholder="Місто" />
+          <input id="profileCity" placeholder="Місто" list="profileCityOptions" autocomplete="off" />
+          <datalist id="profileCityOptions"></datalist>
           <input id="address" placeholder="Адреса (обов'язково)" />
           <div id="performerCategoriesWrap" class="hidden">
             <div class="small" style="margin-bottom:8px">Оберіть послуги, які надаєте:</div>
@@ -244,7 +247,8 @@
           <div class="small" style="margin-bottom:2px; font-weight:700">Оберіть категорії робіт</div>
           <div id="taskCategories" class="checks"></div>
           <div class="row">
-            <input id="city" placeholder="Місто (Київ)" />
+            <input id="city" placeholder="Місто (Київ)" list="taskCityOptions" autocomplete="off" />
+            <datalist id="taskCityOptions"></datalist>
           </div>
           <input id="budget" type="number" placeholder="Бюджет, грн" />
           <input id="photos" type="file" accept="image/*" multiple />
@@ -254,7 +258,6 @@
       </section>
 
       <section style="margin-top:14px">
-        <div id="performerHomeCard" class="card hidden" style="margin-bottom:14px"></div>
         <div id="cabinetCard" class="card hidden" style="margin-bottom:14px"></div>
         <div id="performerProfileCard" class="card hidden profile-card" style="margin-bottom:14px"></div>
         <div id="tasks" class="grid"></div>
@@ -276,6 +279,31 @@
       let selectedRole = "client";
       let authState = "loading"; // loading | authed | unauthed
       let authInitInProgress = false;
+      const ukraineCitySeed = [
+        "Київ","Харків","Одеса","Дніпро","Запоріжжя","Львів","Кривий Ріг","Миколаїв","Вінниця","Херсон",
+        "Полтава","Чернігів","Черкаси","Суми","Житомир","Хмельницький","Чернівці","Рівне","Івано-Франківськ","Тернопіль",
+        "Кропивницький","Луцьк","Ужгород","Біла Церква","Кременчук","Кам'янське","Нікополь","Бердичів","Павлоград","Бровари",
+        "Буча","Ірпінь","Вишгород","Бориспіль","Васильків","Фастів","Обухів","Переяслав",
+        "Бориспіль","Боярка","Бучач","Конотоп","Шостка","Охтирка","Ромни","Глухів",
+        "Ковель","Нововолинськ","Володимир","Дубно","Вараш","Сарни","Мукачево","Берегове","Хуст","Тячів",
+        "Стрий","Дрогобич","Самбір","Червоноград","Трускавець","Броди","Коломия","Калуш","Надвірна","Яремче",
+        "Косів","Чортків","Кременець","Збараж","Бережани","Долина","Болехів","Новояворівськ","Золочів","Сокаль",
+        "Маріуполь","Бердянськ","Мелітополь","Енергодар","Токмак","Пологи","Приморськ","Гуляйполе","Оріхів","Василівка",
+        "Каховка","Нова Каховка","Генічеськ","Скадовськ","Олешки","Гола Пристань","Чаплинка","Берислав","Таврійськ","Горностаївка",
+        "Южноукраїнськ","Первомайськ","Вознесенськ","Баштанка","Нова Одеса","Снігурівка","Очаків","Корабельне","Арбузинка","Доманівка",
+        "Ізмаїл","Чорноморськ","Подільськ","Білгород-Дністровський","Южне","Роздільна","Татарбунари","Арциз","Рені","Болград",
+        "Лубни","Миргород","Горішні Плавні","Пирятин","Гадяч","Карлівка","Решетилівка","Лохвиця","Кобеляки","Зіньків",
+        "Краматорськ","Слов'янськ","Бахмут","Покровськ","Костянтинівка","Дружківка","Добропілля","Лиман","Селидове","Торецьк",
+        "Павлоград","Новомосковськ","Жовті Води","Синельникове","Самар","Першотравенськ","Марганець","Покров","Верхньодніпровськ","Апостолове",
+        "Умань","Сміла","Золотоноша","Канів","Корсунь-Шевченківський","Звенигородка","Тальне","Шпола","Городище","Ватутіне",
+        "Ніжин","Прилуки","Бахмач","Новгород-Сіверський","Корюківка","Мена","Сосниця","Носівка","Бобровиця","Остер",
+        "Коростень","Звягель","Бердичів","Малин","Овруч","Радомишль","Коростишів","Баранівка","Чуднів","Андрушівка",
+        "Кам'янець-Подільський","Шепетівка","Старокостянтинів","Нетішин","Славута","Красилів","Волочиськ","Деражня","Полонне","Ізяслав",
+        "Кам'янець-Подільський","Хотин","Новодністровськ","Сторожинець","Кіцмань","Вашківці","Герца","Сокиряни","Заставна","Новоселиця"
+      ];
+      const citySuggestionsCache = new Map();
+      let profileCityDebounce = null;
+      let taskCityDebounce = null;
 
       function buildHeaders() {
         const headers = {};
@@ -378,6 +406,60 @@
           .join("");
       }
 
+      async function fetchUkraineCitySuggestions(query) {
+        const q = (query || "").trim();
+        if (!q || q.length < 2) {
+          return ukraineCitySeed;
+        }
+        const cacheKey = q.toLowerCase();
+        if (citySuggestionsCache.has(cacheKey)) return citySuggestionsCache.get(cacheKey);
+        try {
+          const url = new URL("https://nominatim.openstreetmap.org/search");
+          url.searchParams.set("q", q);
+          url.searchParams.set("countrycodes", "ua");
+          url.searchParams.set("format", "jsonv2");
+          url.searchParams.set("addressdetails", "1");
+          url.searchParams.set("limit", "20");
+          const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+          if (!res.ok) throw new Error("city_suggest_failed");
+          const data = await res.json();
+          const names = [];
+          for (const item of data) {
+            const a = item.address || {};
+            const name = a.city || a.town || a.village || a.municipality || item.name;
+            if (name && !names.includes(name)) names.push(name);
+          }
+          const merged = [...new Set([...names, ...ukraineCitySeed])].slice(0, 40);
+          citySuggestionsCache.set(cacheKey, merged);
+          return merged;
+        } catch (e) {
+          return ukraineCitySeed;
+        }
+      }
+
+      async function populateCityDatalist(inputId, datalistId) {
+        const input = document.getElementById(inputId);
+        const datalist = document.getElementById(datalistId);
+        if (!input || !datalist) return;
+        const cities = await fetchUkraineCitySuggestions(input.value);
+        datalist.innerHTML = cities.map((city) => `<option value="${city}"></option>`).join("");
+      }
+
+      function setupCityAutocomplete() {
+        const profileInput = document.getElementById("profileCity");
+        const taskInput = document.getElementById("city");
+        profileInput.addEventListener("input", () => {
+          if (profileCityDebounce) clearTimeout(profileCityDebounce);
+          profileCityDebounce = setTimeout(() => populateCityDatalist("profileCity", "profileCityOptions"), 200);
+        });
+        profileInput.addEventListener("focus", () => populateCityDatalist("profileCity", "profileCityOptions"));
+        taskInput.addEventListener("input", () => {
+          if (taskCityDebounce) clearTimeout(taskCityDebounce);
+          taskCityDebounce = setTimeout(() => populateCityDatalist("city", "taskCityOptions"), 200);
+        });
+        taskInput.addEventListener("focus", () => populateCityDatalist("city", "taskCityOptions"));
+      }
+
       async function fetchServiceCategories() {
         const res = await fetch(`${API_BASE}/api/service-categories`);
         if (!res.ok) {
@@ -426,7 +508,6 @@
         document.getElementById("quickSection").classList.add("hidden");
         document.getElementById("filtersCard").classList.add("hidden");
         document.getElementById("createTaskCard").classList.toggle("hidden", !isRegistered || selectedRole !== "client");
-        document.getElementById("performerHomeCard").classList.toggle("hidden", !isRegistered || selectedRole !== "performer");
         document.getElementById("cabinetBtn").classList.toggle("hidden", !isRegistered);
         if (isRegistered && selectedRole === "client") {
           welcome.textContent = `Ласкаво просимо, ${currentUser?.full_name || "Клієнт"}`;
@@ -435,15 +516,12 @@
         if (!isRegistered) {
           document.getElementById("performerProfileCard").classList.add("hidden");
           document.getElementById("cabinetCard").classList.add("hidden");
-          document.getElementById("performerHomeCard").classList.add("hidden");
           if (selectedRole) {
             const roleSelect = document.getElementById("roleSelect");
             roleSelect.value = selectedRole;
             roleSelect.dispatchEvent(new Event("change"));
           }
           document.getElementById("tasks").innerHTML = "";
-        } else if (selectedRole === "performer") {
-          renderPerformerHome();
         }
       }
 
@@ -457,17 +535,6 @@
         if (isRegistered) {
           fetchTasks();
         }
-      }
-
-      function renderPerformerHome() {
-        const node = document.getElementById("performerHomeCard");
-        node.classList.remove("hidden");
-        node.innerHTML = `
-          <h3 style="margin-top:0">Профіль майстра</h3>
-          <div class="small">Майстер: ${currentUser?.full_name || "—"}</div>
-          <div class="small">Категорії: ${(currentUser?.performer_categories || []).join(", ") || "—"}</div>
-          <div class="small">Тут автоматично з'являються заявки за вашим профілем.</div>
-        `;
       }
 
       function translateTaskStatus(status) {
@@ -694,13 +761,21 @@
         const registerStatus = document.getElementById("registerStatus");
         registerStatus.textContent = "";
         const role = selectedRole;
-        const fullName = document.getElementById("fullName").value.trim();
+        const firstName = document.getElementById("firstName").value.trim();
+        const lastName = document.getElementById("lastName").value.trim();
+        const middleName = document.getElementById("middleName").value.trim();
+        const fullName = `${lastName} ${firstName} ${middleName}`.replace(/\s+/g, " ").trim();
         const phone = document.getElementById("phone").value.trim();
         const city = document.getElementById("profileCity").value.trim();
         const address = role === "client" ? document.getElementById("address").value.trim() : "";
         const categories = Array.from(document.querySelectorAll("input[name='performer-category']:checked"))
           .map((el) => el.value);
         const performerPhoto = document.getElementById("performerPhoto").files?.[0];
+
+        if (!firstName || !lastName || !middleName) {
+          registerStatus.textContent = "Заповніть ім'я, прізвище та по батькові";
+          return;
+        }
 
         if (role === "performer" && !performerPhoto) {
           registerStatus.textContent = "Для виконавця фото обов'язкове";
@@ -1048,6 +1123,7 @@
 
       (async () => {
         await fetchServiceCategories();
+        setupCityAutocomplete();
         await initAuthGate();
       })();
     </script>

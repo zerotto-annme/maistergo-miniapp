@@ -44,6 +44,7 @@ ALLOWED_SERVICE_CATEGORIES = [
     "Гипсокартонные работы",
     "Двери и окна",
     "Потолок",
+    "Інше",
 ]
 
 app = FastAPI(title="Telegram Mini App - Services Marketplace")
