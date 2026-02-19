@@ -74,6 +74,8 @@
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
       .actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
       .btn-secondary { background: #fff; color: var(--brand-dark); border: 1px solid var(--brand); }
+      .btn-black { background: #111827; color: #fff; border: 1px solid #111827; }
+      .btn-black:hover { background: #000; }
       .small { font-size: 13px; color: var(--muted); margin-top: 8px; }
       .hidden { display: none !important; }
       .tabbar {
@@ -994,7 +996,8 @@
                 ${Number(task.budget || 0) > 0 ? `<button class="agree-budget-btn" data-task-id="${task.id}" style="margin-bottom:8px">✅ Погоджуюсь з ціною (${task.budget} грн)</button>` : ""}
                 <div style="font-weight:700; margin-bottom:6px">💬 Запропонувати свою ціну</div>
                 <input id="price-${task.id}" type="number" placeholder="Ваша ціна" />
-                <button style="margin-top:8px" data-task-id="${task.id}">Надіслати пропозицію</button>
+                <button style="margin-top:8px" data-task-id="${task.id}" id="send-proposal-${task.id}">Надіслати пропозицію</button>
+                <button class="btn-black hidden" style="margin-top:8px" data-task-id="${task.id}" id="withdraw-proposal-${task.id}">Відмовитись</button>
                 <div class="small" id="status-${task.id}"></div>
                 <div class="small" id="performer-contact-${task.id}"></div>
               </div>
@@ -1015,11 +1018,15 @@
                 status.textContent = formatApiError(err.detail, "Помилка");
                 return;
               }
-              status.textContent = "Пропозицію надіслано";
+              const sendBtn = card.querySelector(`#send-proposal-${task.id}`);
+              if (sendBtn) {
+                sendBtn.textContent = "Пропозицію надіслано";
+                sendBtn.disabled = true;
+              }
               await loadPerformerTaskState(task.id, status, card.querySelector(`#performer-contact-${task.id}`));
             });
 
-            const bidButton = card.querySelector("button[data-task-id]");
+            const bidButton = card.querySelector(`#send-proposal-${task.id}`);
             bidButton.addEventListener("click", async () => {
               const price = Number(document.getElementById(`price-${task.id}`).value);
               const status = document.getElementById(`status-${task.id}`);
@@ -1031,12 +1038,39 @@
               });
 
               if (resp.ok) {
-                status.textContent = "Відгук надіслано";
+                const sendBtn = card.querySelector(`#send-proposal-${task.id}`);
+                if (sendBtn) {
+                  sendBtn.textContent = "Пропозицію надіслано";
+                  sendBtn.disabled = true;
+                }
                 await loadPerformerTaskState(task.id, status, card.querySelector(`#performer-contact-${task.id}`));
               } else {
                 const err = await resp.json();
                 status.textContent = formatApiError(err.detail, "Помилка");
               }
+            });
+            const withdrawBtn = card.querySelector(`#withdraw-proposal-${task.id}`);
+            withdrawBtn?.addEventListener("click", async () => {
+              const bidId = withdrawBtn.dataset.bidId;
+              const status = document.getElementById(`status-${task.id}`);
+              if (!bidId) return;
+              const resp = await fetch(`${API_BASE}/api/bids/${bidId}/withdraw`, {
+                method: "POST",
+                headers: buildHeaders(),
+              });
+              if (!resp.ok) {
+                const err = await resp.json();
+                status.textContent = formatApiError(err.detail, "Не вдалося відкликати");
+                return;
+              }
+              status.textContent = "Ви відмовилися від заявки";
+              withdrawBtn.classList.add("hidden");
+              const sendBtn = card.querySelector(`#send-proposal-${task.id}`);
+              if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.textContent = "Надіслати пропозицію";
+              }
+              await loadPerformerTaskState(task.id, status, card.querySelector(`#performer-contact-${task.id}`));
             });
             loadPerformerTaskState(task.id, card.querySelector(`#status-${task.id}`), card.querySelector(`#performer-contact-${task.id}`));
           }
@@ -1167,8 +1201,17 @@
               <div class="small">Статус: ${translateBidStatus(b.status)}</div>
               <div class="row" style="margin-top:8px">
                 ${b.status === "pending" ? `<button class="accept-bid-btn" data-bid-id="${b.id}">Обрати майстра</button>` : ""}
+                ${b.status === "pending" ? `<button class="counter-open-btn btn-secondary" data-bid-id="${b.id}">Запропонувати ціну</button>` : ""}
                 ${b.status === "accepted" ? `<button class="complete-bid-btn" data-bid-id="${b.id}">Робота виконана</button>` : ""}
+                ${["pending","accepted"].includes(b.status) ? `<button class="reject-bid-btn btn-black" data-bid-id="${b.id}">Відмовитись</button>` : ""}
               </div>
+              ${b.status === "pending" ? `
+                <div id="counter-wrap-${b.id}" class="hidden" style="margin-top:8px">
+                  <input id="counter-price-${b.id}" type="number" placeholder="Нова ціна" />
+                  <input id="counter-message-${b.id}" placeholder="Коментар для майстра (опціонально)" style="margin-top:6px" />
+                  <button class="counter-send-btn" data-bid-id="${b.id}" style="margin-top:6px">Надіслати ціну</button>
+                </div>
+              ` : ""}
               ${b.status === "completed" && !b.has_review ? `
                 <div class="row" style="margin-top:8px">
                   <select id="rating-${b.id}">
@@ -1202,6 +1245,44 @@
             if (!r.ok) {
               const err = await r.json();
               alert(formatApiError(err.detail, "Не вдалося завершити"));
+              return;
+            }
+            fetchMyRequests();
+          });
+        });
+        node.querySelectorAll(".counter-open-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const wrap = document.getElementById(`counter-wrap-${btn.dataset.bidId}`);
+            wrap?.classList.toggle("hidden");
+          });
+        });
+        node.querySelectorAll(".counter-send-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const bidId = btn.dataset.bidId;
+            const price = Number(document.getElementById(`counter-price-${bidId}`).value);
+            const message = document.getElementById(`counter-message-${bidId}`).value.trim() || "Контрпропозиція клієнта";
+            const r = await fetch(`${API_BASE}/api/bids/${bidId}/counter`, {
+              method: "POST",
+              headers: { ...buildHeaders(), "Content-Type": "application/json" },
+              body: JSON.stringify({ price, message }),
+            });
+            if (!r.ok) {
+              const err = await r.json();
+              alert(formatApiError(err.detail, "Не вдалося надіслати ціну"));
+              return;
+            }
+            fetchMyRequests();
+          });
+        });
+        node.querySelectorAll(".reject-bid-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const r = await fetch(`${API_BASE}/api/bids/${btn.dataset.bidId}/reject`, {
+              method: "POST",
+              headers: buildHeaders(),
+            });
+            if (!r.ok) {
+              const err = await r.json();
+              alert(formatApiError(err.detail, "Не вдалося відхилити"));
               return;
             }
             fetchMyRequests();
@@ -1273,9 +1354,29 @@
         const resp = await fetch(`${API_BASE}/api/tasks/${taskId}/bids?mode=performer`, { headers: buildHeaders() });
         if (!resp.ok) return;
         const bids = await resp.json();
-        if (!bids.length) return;
+        const card = statusNode?.closest(".card");
+        const sendBtn = card?.querySelector(`#send-proposal-${taskId}`);
+        const withdrawBtn = card?.querySelector(`#withdraw-proposal-${taskId}`);
+        if (!bids.length) {
+          if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Надіслати пропозицію";
+          }
+          withdrawBtn?.classList.add("hidden");
+          return;
+        }
         const myBid = bids[0];
         statusNode.textContent = `Мій відгук: ${translateBidStatus(myBid.status)} (${myBid.price} грн)`;
+        if (sendBtn && myBid.status !== "withdrawn") {
+          sendBtn.disabled = true;
+          sendBtn.textContent = "Пропозицію надіслано";
+        }
+        if (withdrawBtn && myBid.status !== "completed" && myBid.status !== "withdrawn") {
+          withdrawBtn.dataset.bidId = String(myBid.id);
+          withdrawBtn.classList.remove("hidden");
+        } else {
+          withdrawBtn?.classList.add("hidden");
+        }
         if (myBid.status === "accepted" || myBid.status === "completed") {
           const contactResp = await fetch(`${API_BASE}/api/bids/${myBid.id}/client-contact`, { headers: buildHeaders() });
           if (contactResp.ok) {

@@ -870,6 +870,70 @@ def accept_bid(
     return bid_to_out(db, bid)
 
 
+@app.post("/api/bids/{bid_id}/reject", response_model=BidOut)
+def reject_bid(
+    bid_id: int,
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    require_client(user)
+
+    bid = db.query(Bid).filter(Bid.id == bid_id).first()
+    if not bid:
+        raise HTTPException(status_code=404, detail="Відгук не знайдено")
+
+    task = db.query(Task).filter(Task.id == bid.task_id).first()
+    if not task or task.client_id != user.id:
+        raise HTTPException(status_code=403, detail="Немає доступу")
+
+    bid.status = "rejected"
+    if task.selected_offer_id == bid.id and task.status == "in_progress":
+        task.selected_offer_id = None
+        task.status = "open"
+        db.add(task)
+    db.add(bid)
+    db.commit()
+    db.refresh(bid)
+    return bid_to_out(db, bid)
+
+
+@app.post("/api/bids/{bid_id}/counter", response_model=BidOut)
+def counter_bid(
+    bid_id: int,
+    payload: BidCreate,
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    require_client(user)
+
+    bid = db.query(Bid).filter(Bid.id == bid_id).first()
+    if not bid:
+        raise HTTPException(status_code=404, detail="Відгук не знайдено")
+
+    task = db.query(Task).filter(Task.id == bid.task_id).first()
+    if not task or task.client_id != user.id:
+        raise HTTPException(status_code=403, detail="Немає доступу")
+    if task.status == "completed":
+        raise HTTPException(status_code=400, detail="Заявка вже завершена")
+
+    bid.price = payload.price
+    bid.message = payload.message or "Контрпропозиція від клієнта"
+    bid.status = "pending"
+    db.add(bid)
+    db.commit()
+    db.refresh(bid)
+    performer = db.query(User).filter(User.id == bid.performer_id).first()
+    if performer and performer.telegram_chat_id:
+        send_telegram_message(int(performer.telegram_chat_id), "Клієнт запропонував нову ціну. Перевірте заявку.")
+    return bid_to_out(db, bid)
+
+
 @app.post("/api/bids/{bid_id}/complete", response_model=BidOut)
 def complete_bid(
     bid_id: int,
@@ -895,6 +959,38 @@ def complete_bid(
     task.status = "completed"
     db.add(bid)
     db.add(task)
+    db.commit()
+    db.refresh(bid)
+    return bid_to_out(db, bid)
+
+
+@app.post("/api/bids/{bid_id}/withdraw", response_model=BidOut)
+def withdraw_bid(
+    bid_id: int,
+    x_telegram_init_data: str | None = Header(default=None),
+    x_telegram_user: str | None = Header(default=None),
+    x_dev_user_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = authorize(db, x_telegram_init_data, x_telegram_user, x_dev_user_id)
+    require_performer(user)
+
+    bid = db.query(Bid).filter(Bid.id == bid_id, Bid.performer_id == user.id).first()
+    if not bid:
+        raise HTTPException(status_code=404, detail="Відгук не знайдено")
+    if bid.status == "completed":
+        raise HTTPException(status_code=400, detail="Завершений відгук не можна відкликати")
+
+    task = db.query(Task).filter(Task.id == bid.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Заявка не знайдена")
+
+    bid.status = "withdrawn"
+    db.add(bid)
+    if task.selected_offer_id == bid.id and task.status == "in_progress":
+        task.selected_offer_id = None
+        task.status = "open"
+        db.add(task)
     db.commit()
     db.refresh(bid)
     return bid_to_out(db, bid)
