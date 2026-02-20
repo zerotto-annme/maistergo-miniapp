@@ -846,7 +846,7 @@
       async function initAuthGate() {
         if (authInitInProgress) return;
         authInitInProgress = true;
-        // Полностью убираем блокировку сплеша: сразу пускаем в приложение.
+        // Полностью убираем блокирующую проверку профиля: сразу пускаем на приложение.
         authState = "authed";
         appStarted = true;
         selectedRole = selectedRole || "client";
@@ -854,11 +854,11 @@
         authLastReason = "skip_auth";
         authLastTs = new Date().toISOString();
         authErrorText = "";
-        document.getElementById("authSplash")?.classList.add("hidden");
+        const splash = document.getElementById("authSplash");
+        if (splash) splash.classList.add("hidden");
         navigate("/app", true);
         showByRole();
         renderAppSections();
-        fetchHomeTasks();
         authInitInProgress = false;
       }
 
