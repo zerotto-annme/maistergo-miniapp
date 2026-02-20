@@ -900,19 +900,29 @@
 
         try {
           registerStatus.textContent = "Реєстрація...";
+          console.log("[register] API_BASE", API_BASE);
           const res = await fetch(`${API_BASE}/api/register`, {
             method: "POST",
             headers: buildHeaders(),
             body: formData,
           });
 
+          const raw = await res.text();
+          console.log("[register] status", res.status, "raw", raw);
           if (!res.ok) {
-            const err = await res.json();
-            registerStatus.textContent = formatApiError(err.detail, "Помилка реєстрації");
+            let errDetail = "Помилка реєстрації";
+            try {
+              const err = raw ? JSON.parse(raw) : {};
+              errDetail = formatApiError(err.detail || err, errDetail);
+            } catch (e) {
+              /* ignore */
+            }
+            registerStatus.textContent = errDetail;
             return;
           }
 
-          currentUser = await res.json();
+          const data = raw ? JSON.parse(raw) : null;
+          currentUser = (data && (data.user || data)) || data;
           authState = "authed";
           appStarted = true;
           registerStatus.textContent = "Реєстрацію завершено";
@@ -921,7 +931,8 @@
           renderAppSections();
           fetchHomeTasks();
         } catch (e) {
-          registerStatus.textContent = "Помилка мережі. Перевірте тунель і спробуйте ще раз.";
+          console.error("[register] error", e);
+          registerStatus.textContent = `Помилка мережі: ${e?.message || ""}`;
         }
       }
 
