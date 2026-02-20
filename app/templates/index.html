@@ -336,7 +336,7 @@
         tg.expand();
       }
 
-      const API_BASE = "";
+      const API_BASE = window.API_BASE_OVERRIDE || window.location.origin;
       let currentUser = null;
       let serviceCategories = [];
       let appStarted = false;
