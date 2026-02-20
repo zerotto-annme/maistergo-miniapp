@@ -846,19 +846,18 @@
       async function initAuthGate() {
         if (authInitInProgress) return;
         authInitInProgress = true;
-        // Полностью убираем блокирующую проверку профиля: сразу пускаем на приложение.
+        // Показываем стартовый выбор роли, без блокирующей проверки.
         authState = "authed";
-        appStarted = true;
-        selectedRole = selectedRole || "client";
+        appStarted = false;
+        selectedRole = "";
         authLastStatus = "bypass";
         authLastReason = "skip_auth";
         authLastTs = new Date().toISOString();
         authErrorText = "";
         const splash = document.getElementById("authSplash");
         if (splash) splash.classList.add("hidden");
-        navigate("/app", true);
+        navigate("/register", true);
         showByRole();
-        renderAppSections();
         authInitInProgress = false;
       }
 
