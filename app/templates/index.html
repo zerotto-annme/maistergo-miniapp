@@ -884,10 +884,7 @@
           return;
         }
 
-        if (role === "performer" && !performerPhoto) {
-          registerStatus.textContent = "Для виконавця фото обов'язкове";
-          return;
-        }
+        // Фото тепер не блокує реєстрацію на фронті (бекенд все одно перевірить за потреби)
 
         const formData = new FormData();
         formData.append("role", role);
