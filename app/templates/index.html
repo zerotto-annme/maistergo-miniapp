@@ -846,53 +846,20 @@
       async function initAuthGate() {
         if (authInitInProgress) return;
         authInitInProgress = true;
-        authState = "loading";
-        resetAuthSplashLoading();
+        // Полностью убираем блокировку сплеша: сразу пускаем в приложение.
+        authState = "authed";
+        appStarted = true;
+        selectedRole = selectedRole || "client";
+        authLastStatus = "bypass";
+        authLastReason = "skip_auth";
+        authLastTs = new Date().toISOString();
+        authErrorText = "";
+        document.getElementById("authSplash")?.classList.add("hidden");
+        navigate("/app", true);
         showByRole();
-        const startedAt = Date.now();
-
-        try {
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("auth_timeout")), 5000)
-          );
-          const me = await Promise.race([fetchMe(), timeoutPromise]);
-
-          const elapsed = Date.now() - startedAt;
-          if (elapsed < 3000) await sleep(3000 - elapsed);
-
-          if (!me) {
-            throw new Error("auth_lookup_failed");
-          }
-
-          if (hasAnyRegistration(me)) {
-            authState = "authed";
-            appStarted = true;
-            selectedRole = me.role === "performer" ? "performer" : "client";
-            if (!isRoleRegistered(selectedRole)) {
-              selectedRole = me.is_client_registered ? "client" : "performer";
-            }
-            if (currentRoute() === "/register") navigate("/app", true);
-            showByRole();
-            renderAppSections();
-            fetchHomeTasks();
-            return;
-          }
-
-          authState = "unauthed";
-          appStarted = false;
-          selectedRole = "client";
-          if (currentRoute() === "/app") navigate("/register", true);
-          showByRole();
-        } catch (error) {
-          console.error("[auth] initAuthGate error", error);
-          const elapsed = Date.now() - startedAt;
-          if (elapsed < 3000) await sleep(3000 - elapsed);
-          authState = "loading";
-          showByRole();
-          showAuthSplashError("Спробуйте ще раз через кілька секунд");
-        } finally {
-          authInitInProgress = false;
-        }
+        renderAppSections();
+        fetchHomeTasks();
+        authInitInProgress = false;
       }
 
       async function registerUser() {
