@@ -323,8 +323,9 @@
     </div>
     <nav id="tabbar" class="tabbar hidden">
       <button id="tabHome" class="tab-btn">🏠 Головна</button>
-      <button id="tabCreate" class="tab-btn">➕ Створити</button>
+      <button id="tabCreate" class="tab-btn">➕ Заявка</button>
       <button id="tabMy" class="tab-btn">📋 Мої заявки</button>
+      <button id="tabChats" class="tab-btn">💬 Чати</button>
       <button id="tabProfile" class="tab-btn">👤 Кабінет</button>
     </nav>
 
@@ -570,6 +571,7 @@
           home: document.getElementById("homeSection"),
           create: document.getElementById("createSection"),
           my: document.getElementById("myRequestsSection"),
+          chats: document.getElementById("chatsSection"),
           profile: document.getElementById("profileSection"),
         };
         Object.values(sections).forEach((el) => el.classList.add("hidden"));
@@ -580,6 +582,7 @@
           home: "tabHome",
           create: "tabCreate",
           my: "tabMy",
+          chats: "tabChats",
           profile: "tabProfile",
         };
         const activeBtnId = activeBtnMap[activeTab];
