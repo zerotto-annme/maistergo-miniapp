@@ -330,6 +330,33 @@
     </nav>
 
     <script>
+      async function waitForTelegramInitData(timeout = 3000) {
+        const tg = window.Telegram?.WebApp;
+        if (!tg) return ""; // не в Telegram (браузер)
+
+        try {
+          tg.ready();
+          tg.expand();
+        } catch (e) {}
+
+        if (tg.initData && tg.initData.length > 0) {
+          return tg.initData;
+        }
+
+        return new Promise((resolve) => {
+          const start = Date.now();
+          const interval = setInterval(() => {
+            if (tg.initData && tg.initData.length > 0) {
+              clearInterval(interval);
+              resolve(tg.initData);
+            } else if (Date.now() - start > timeout) {
+              clearInterval(interval);
+              resolve("");
+            }
+          }, 50);
+        });
+      }
+
       const tg = window.Telegram?.WebApp;
       if (tg) {
         tg.ready();
