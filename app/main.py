@@ -301,19 +301,30 @@ def authorize(
     x_telegram_user: str | None,
     x_dev_user_id: str | None,
 ) -> User:
+    # 1) Если есть initData и есть токен — пробуем валидировать
     if x_telegram_init_data and BOT_TOKEN:
         is_valid = validate_telegram_init_data(x_telegram_init_data, BOT_TOKEN)
-        if not is_valid:
-            logger.warning("telegram_init_data_validation failed")
-            raise HTTPException(status_code=401, detail="Некоректна авторизація Telegram")
-        logger.info("telegram_init_data_validation ok")
+        if is_valid:
+            logger.info("telegram_init_data_validation ok")
+            return get_or_create_user(db, x_telegram_user, x_telegram_init_data, x_dev_user_id)
+        # если токен не совпал, но разрешен DEV_BYPASS_AUTH — не блокируем
+        if DEV_BYPASS_AUTH:
+            logger.warning("telegram_init_data_validation failed, fallback via DEV_BYPASS_AUTH")
+            return get_or_create_user(db, x_telegram_user, x_telegram_init_data, x_dev_user_id)
+        logger.warning("telegram_init_data_validation failed (strict mode)")
+        raise HTTPException(status_code=401, detail="Некоректна авторизація Telegram")
+
+    # 2) Если initData есть, но BOT_TOKEN пуст, разрешаем при DEV_BYPASS_AUTH
+    if x_telegram_init_data and not BOT_TOKEN and DEV_BYPASS_AUTH:
+        logger.info("auth fallback: BOT_TOKEN empty, using DEV_BYPASS_AUTH")
         return get_or_create_user(db, x_telegram_user, x_telegram_init_data, x_dev_user_id)
 
+    # 3) Dev bypass или отсутствие initData: не блокируем вход
     if DEV_BYPASS_AUTH:
         return get_or_create_user(db, x_telegram_user, x_telegram_init_data, x_dev_user_id)
 
-    # allow unauth for now to bypass splash failures
-    return get_or_create_user(db, x_telegram_user, x_telegram_init_data, x_dev_user_id)
+    # 4) Жёсткая защита, если ни initData, ни bypass
+    raise HTTPException(status_code=401, detail="Відсутні заголовки авторизації Telegram")
 
 
 def require_registered(user: User) -> None:
