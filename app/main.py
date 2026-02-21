@@ -538,12 +538,8 @@ async def register(
     if role_clean == "performer":
         if user.address is None:
             user.address = ""
-        normalized_categories = normalize_categories(categories)
-        if not normalized_categories:
-            raise HTTPException(status_code=422, detail="Оберіть хоча б одну категорію")
+        normalized_categories = normalize_categories(categories) if categories else []
         user.set_performer_categories(normalized_categories)
-        if profile_photo is None and not user.profile_photo_url:
-            raise HTTPException(status_code=422, detail="Фото виконавця обов'язкове")
         if profile_photo is not None:
             user.profile_photo_url = await save_image(profile_photo)
         user.is_performer_registered = 1
