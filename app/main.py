@@ -417,6 +417,8 @@ def normalize_categories(values: list[str]) -> list[str]:
 
 def validate_phone(phone: str) -> str:
     clean = phone.strip()
+    if clean == "":
+        return ""
     if not re.fullmatch(r"[0-9+()\-\s]{7,64}", clean):
         raise HTTPException(status_code=422, detail="Некоректний номер телефону")
     return clean
